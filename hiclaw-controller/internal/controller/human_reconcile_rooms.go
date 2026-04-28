@@ -71,12 +71,45 @@ func (r *HumanReconciler) reconcileHumanRooms(ctx context.Context, s *humanScope
 
 	// Removals: in-place filter. A failed kick keeps the room so the
 	// next reconcile retries, matching pre-refactor behavior.
+	//
+	// Unlike additions which rely on status.RoomID/TeamRoomID, removals are
+	// based on the spec: we only kick if the team/worker was explicitly
+	// removed from accessibleTeams/AccessibleWorkers. This prevents
+	// phantom removals when a team hasn't finished provisioning yet
+	// (TeamRoomID is empty) or when status hasn't been updated.
 	kept := next[:0]
 	for _, rid := range next {
 		if _, ok := desired[rid]; ok {
 			kept = append(kept, rid)
 			continue
 		}
+
+		// Check if this room belongs to a team that is still in accessibleTeams.
+		// If so, don't kick - the team just hasn't been provisioned yet.
+		if teamName := findTeamNameByRoomID(ctx, r.Client, h.Namespace, rid); teamName != "" {
+			for _, accessibleTeam := range h.Spec.AccessibleTeams {
+				if accessibleTeam == teamName {
+					// Team is still accessible, don't kick even though status.TeamRoomID might be empty
+					kept = append(kept, rid)
+					break
+				}
+			}
+			continue
+		}
+
+		// Check if this room belongs to a worker that is still in AccessibleWorkers
+		if workerName := findWorkerNameByRoomID(ctx, r.Client, h.Namespace, rid); workerName != "" {
+			for _, accessibleWorker := range h.Spec.AccessibleWorkers {
+				if accessibleWorker == workerName {
+					// Worker is still accessible, don't kick even though status.RoomID might be empty
+					kept = append(kept, rid)
+					break
+				}
+			}
+			continue
+		}
+
+		// Not in desired, and not in accessibleTeams/Workers - safe to kick
 		if err := r.Provisioner.KickFromRoom(ctx, rid, matrixUserID, "access revoked"); err != nil {
 			logger.Error(err, "failed to kick human from room", "room", rid)
 			kept = append(kept, rid)

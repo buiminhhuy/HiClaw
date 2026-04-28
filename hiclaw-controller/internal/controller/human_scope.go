@@ -77,3 +77,33 @@ func buildDesiredHumanRooms(ctx context.Context, c client.Client, h *v1beta1.Hum
 	}
 	return desired
 }
+
+// findTeamNameByRoomID looks up a Team by its TeamRoomID and returns the team name.
+// Returns empty string if no matching team is found.
+func findTeamNameByRoomID(ctx context.Context, c client.Client, ns, roomID string) string {
+	var teamList v1beta1.TeamList
+	if err := c.List(ctx, &teamList, client.InNamespace(ns)); err != nil {
+		return ""
+	}
+	for _, t := range teamList.Items {
+		if t.Status.TeamRoomID == roomID {
+			return t.Name
+		}
+	}
+	return ""
+}
+
+// findWorkerNameByRoomID looks up a Worker by its RoomID and returns the worker name.
+// Returns empty string if no matching worker is found.
+func findWorkerNameByRoomID(ctx context.Context, c client.Client, ns, roomID string) string {
+	var workerList v1beta1.WorkerList
+	if err := c.List(ctx, &workerList, client.InNamespace(ns)); err != nil {
+		return ""
+	}
+	for _, w := range workerList.Items {
+		if w.Status.RoomID == roomID {
+			return w.Name
+		}
+	}
+	return ""
+}
