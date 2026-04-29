@@ -77,6 +77,21 @@ func (r *HumanReconciler) reconcileHumanRooms(ctx context.Context, s *humanScope
 			kept = append(kept, rid)
 			continue
 		}
+
+		// Check if this room belongs to a worker still in AccessibleWorkers
+		// If API error, skip kick for safety. If worker exists but not provisioned yet,
+		// skip kick to avoid phantom removal.
+		inWorker, err := isRoomFromAccessibleWorker(ctx, r.Client, h.Namespace, rid, h.Spec.AccessibleWorkers)
+		if err != nil {
+			logger.Error(err, "transient error checking accessible workers; skipping kick for safety", "room", rid)
+			kept = append(kept, rid)
+			continue
+		}
+		if inWorker {
+			kept = append(kept, rid)
+			continue
+		}
+
 		if err := r.Provisioner.KickFromRoom(ctx, rid, matrixUserID, "access revoked"); err != nil {
 			logger.Error(err, "failed to kick human from room", "room", rid)
 			kept = append(kept, rid)

@@ -77,3 +77,27 @@ func buildDesiredHumanRooms(ctx context.Context, c client.Client, h *v1beta1.Hum
 	}
 	return desired
 }
+
+// isRoomFromAccessibleWorker checks if roomID belongs to a worker still in accessibleWorkers.
+// Returns (true, nil) if worker is in accessibleWorkers AND roomID matches.
+// Returns (true, nil) if worker is in accessibleWorkers AND RoomID is empty (worker not provisioned yet).
+// Returns (false, err) if API fails - caller should skip kick for safety.
+// Returns (false, nil) if roomID doesn't match any accessible worker (safe to kick).
+func isRoomFromAccessibleWorker(ctx context.Context, c client.Client, ns, roomID string, accessibleWorkers []string) (bool, error) {
+	for _, workerName := range accessibleWorkers {
+		var worker v1beta1.Worker
+		if err := c.Get(ctx, client.ObjectKey{Name: workerName, Namespace: ns}, &worker); err != nil {
+			return false, err
+		}
+		// Exact match - room belongs to this worker
+		if worker.Status.RoomID == roomID {
+			return true, nil
+		}
+		// Worker exists in accessibleWorkers but hasn't been provisioned yet
+		// Don't kick - room might be the worker's future room
+		if worker.Status.RoomID == "" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
