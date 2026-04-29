@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 
+	v1beta1 "github.com/hiclaw/hiclaw-controller/api/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -72,11 +74,11 @@ func (r *HumanReconciler) reconcileHumanRooms(ctx context.Context, s *humanScope
 	// Removals: in-place filter. A failed kick keeps the room so the
 	// next reconcile retries, matching pre-refactor behavior.
 	//
-	// Unlike additions which rely on status.TeamRoomID, removals are
-	// based on the spec: we only kick if the team was explicitly
-	// removed from accessibleTeams. This prevents phantom removals when
-	// a team hasn't finished provisioning yet (TeamRoomID is empty) or
-	// when status hasn't been updated.
+	// Unlike additions which rely on status.TeamRoomID/Worker.Status.RoomID,
+	// removals are based on the spec: we only kick if the team/worker was
+	// explicitly removed from accessibleTeams/AccessibleWorkers. This prevents
+	// phantom removals when a team hasn't finished provisioning yet or when
+	// status hasn't been updated.
 	kept := next[:0]
 	for _, rid := range next {
 		if _, ok := desired[rid]; ok {
@@ -89,7 +91,7 @@ func (r *HumanReconciler) reconcileHumanRooms(ctx context.Context, s *humanScope
 		if teamName := findTeamNameByRoomID(ctx, r.Client, h.Namespace, rid); teamName != "" {
 			for _, accessibleTeam := range h.Spec.AccessibleTeams {
 				if accessibleTeam == teamName {
-					// Team is still accessible, don't kick even though status.TeamRoomID might be empty
+					// Team is still accessible, don't kick
 					kept = append(kept, rid)
 					break
 				}
@@ -97,7 +99,30 @@ func (r *HumanReconciler) reconcileHumanRooms(ctx context.Context, s *humanScope
 			continue
 		}
 
-		// Not in desired, and not in accessibleTeams - safe to kick
+		// Check if this room belongs to a worker that is still in AccessibleWorkers
+		// If so, don't kick - the worker might not be provisioned yet
+		found := false
+		for _, accessibleWorker := range h.Spec.AccessibleWorkers {
+			var worker v1beta1.Worker
+			if err := r.Get(ctx, client.ObjectKey{Name: accessibleWorker, Namespace: h.Namespace}, &worker); err == nil {
+				if worker.Status.RoomID == rid {
+					kept = append(kept, rid)
+					found = true
+					break
+				}
+			}
+			// Also check team workers
+			if teamRoomID := findTeamWorkerRoomID(ctx, r.Client, h.Namespace, accessibleWorker); teamRoomID == rid {
+				kept = append(kept, rid)
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+
+		// Not in desired, and not accessible via spec - safe to kick
 		if err := r.Provisioner.KickFromRoom(ctx, rid, matrixUserID, "access revoked"); err != nil {
 			logger.Error(err, "failed to kick human from room", "room", rid)
 			kept = append(kept, rid)
