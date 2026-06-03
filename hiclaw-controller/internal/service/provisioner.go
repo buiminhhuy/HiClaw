@@ -13,6 +13,7 @@ import (
 	"github.com/hiclaw/hiclaw-controller/internal/matrix"
 	"github.com/hiclaw/hiclaw-controller/internal/oss"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -75,6 +76,7 @@ type ProvisionerConfig struct {
 	OSSAdmin     oss.StorageAdminClient // nil in incluster/cloud mode
 	Creds        CredentialStore
 	K8sClient    kubernetes.Interface
+	K8sCRClient  client.Client // controller-runtime client for CRD operations
 	KubeMode     string
 	Namespace    string
 	AuthAudience string
@@ -134,6 +136,7 @@ type Provisioner struct {
 	ossAdmin       oss.StorageAdminClient
 	creds          CredentialStore
 	k8sClient      kubernetes.Interface
+	k8sCRClient   client.Client // controller-runtime client for CRD operations
 	kubeMode       string
 	namespace      string
 	authAudience   string
@@ -166,6 +169,7 @@ func NewProvisioner(cfg ProvisionerConfig) *Provisioner {
 		ossAdmin:          cfg.OSSAdmin,
 		creds:             cfg.Creds,
 		k8sClient:         cfg.K8sClient,
+		k8sCRClient:       cfg.K8sCRClient,
 		kubeMode:          cfg.KubeMode,
 		namespace:         cfg.Namespace,
 		authAudience:      cfg.AuthAudience,
@@ -626,11 +630,27 @@ func (p *Provisioner) ProvisionTeamRooms(ctx context.Context, req TeamRoomReques
 	adminMatrixID := p.matrix.UserID(p.adminUser)
 	leaderMatrixID := p.matrix.UserID(req.LeaderName)
 
-	// Team Room: Leader + Admin + all Workers
+	// Team Room: Leader + Admin + all Workers + Humans with this team in accessibleTeams
 	teamInvites := []string{adminMatrixID, leaderMatrixID}
 	for _, wn := range req.WorkerNames {
 		teamInvites = append(teamInvites, p.matrix.UserID(wn))
 	}
+
+	// Add Humans that have this team in their accessibleTeams
+	var humanList v1beta1.HumanList
+	if err := p.k8sCRClient.List(ctx, &humanList, client.InNamespace(p.namespace)); err != nil {
+		logger.Error(err, "failed to list humans for team invites", "team", req.TeamName, "namespace", p.namespace)
+	} else {
+		for _, human := range humanList.Items {
+			for _, accessibleTeam := range human.Spec.AccessibleTeams {
+				if accessibleTeam == req.TeamName && human.Status.MatrixUserID != "" {
+					logger.Info("adding human to team invites", "human", human.Name, "team", req.TeamName)
+					teamInvites = append(teamInvites, human.Status.MatrixUserID)
+				}
+			}
+		}
+	}
+
 	teamPowerLevels := map[string]int{
 		managerMatrixID: 100,
 		adminMatrixID:   100,
