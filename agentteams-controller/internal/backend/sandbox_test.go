@@ -554,6 +554,12 @@ func TestSandboxBackend_Create_ImageResolution(t *testing.T) {
 			wantImage: "deepseek-harness:v5",
 		},
 		{
+			name:      "harness runtime",
+			runtime:   RuntimeHarness,
+			config:    SandboxConfig{WorkerImage: "default:latest", HarnessWorkerImage: "harness:v5"},
+			wantImage: "harness:v5",
+		},
+		{
 			name:      "default worker image",
 			config:    SandboxConfig{WorkerImage: "default/worker:latest"},
 			wantImage: "default/worker:latest",

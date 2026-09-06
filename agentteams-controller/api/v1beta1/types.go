@@ -202,8 +202,8 @@ type WorkerSpec struct {
 	// worker value wins over the team default (TeamSpec.LlmStream*).
 	// Consumed by QwenPaw >= 2.2.1 (envs hot-apply API); older runtimes
 	// ignore them.
-	LlmStreamFirstContentTimeout string                     `json:"llmStreamFirstContentTimeout,omitempty"`
-	LlmStreamIdleTimeout         string                     `json:"llmStreamIdleTimeout,omitempty"`
+	LlmStreamFirstContentTimeout string `json:"llmStreamFirstContentTimeout,omitempty"`
+	LlmStreamIdleTimeout         string `json:"llmStreamIdleTimeout,omitempty"`
 	// Llm* tuning knobs are the QwenPaw startup-only LLM settings
 	// (QWENPAW_LLM_MAX_RETRIES and friends). The controller projects the
 	// effective value (worker over team default) into the worker container
@@ -214,29 +214,29 @@ type WorkerSpec struct {
 	// float); invalid values are skipped with a log, never breaking the
 	// container. All eight default to empty = "do not set the env" (the
 	// QwenPaw registry default then applies: 3/1/10/10/600/5/1/300).
-	LlmMaxRetries       string `json:"llmMaxRetries,omitempty"`
-	LlmBackoffBase      string `json:"llmBackoffBase,omitempty"`
-	LlmBackoffCap       string `json:"llmBackoffCap,omitempty"`
-	LlmMaxConcurrent    string `json:"llmMaxConcurrent,omitempty"`
-	LlmMaxQpm           string `json:"llmMaxQpm,omitempty"`
-	LlmRateLimitPause   string `json:"llmRateLimitPause,omitempty"`
-	LlmRateLimitJitter  string `json:"llmRateLimitJitter,omitempty"`
-	LlmAcquireTimeout   string `json:"llmAcquireTimeout,omitempty"`
-	Runtime             string `json:"runtime,omitempty"`    // openclaw | copaw | hermes | qwenpaw | deepseek-harness (default: openclaw)
-	Image                        string                     `json:"image,omitempty"`      // custom Docker image
-	WorkerName                   string                     `json:"workerName,omitempty"` // business/runtime identity (Matrix localpart, OSS path key)
-	Identity                     string                     `json:"identity,omitempty"`
-	Soul                         string                     `json:"soul,omitempty"`
-	Agents                       string                     `json:"agents,omitempty"`
-	Skills                       []string                   `json:"skills,omitempty"`       // built-in skills only
-	RemoteSkills                 []RemoteSkillSource        `json:"remoteSkills,omitempty"` // remote skills from source registries
-	McpServers                   []MCPServer                `json:"mcpServers,omitempty"`
-	Package                      string                     `json:"package,omitempty"` // file://, http(s)://, or nacos://[user:pass@]host:port/...; optional ?authType=nacos|sts-agentteams|none
-	Expose                       []ExposePort               `json:"expose,omitempty"`  // ports to expose via Higress gateway
-	ChannelPolicy                *ChannelPolicySpec         `json:"channelPolicy,omitempty"`
-	Channels                     *ChannelsSpec              `json:"channels,omitempty"`
-	Resources                    *AgentResourceRequirements `json:"resources,omitempty"`
-	IdleTimeout                  string                     `json:"idleTimeout,omitempty"`
+	LlmMaxRetries      string                     `json:"llmMaxRetries,omitempty"`
+	LlmBackoffBase     string                     `json:"llmBackoffBase,omitempty"`
+	LlmBackoffCap      string                     `json:"llmBackoffCap,omitempty"`
+	LlmMaxConcurrent   string                     `json:"llmMaxConcurrent,omitempty"`
+	LlmMaxQpm          string                     `json:"llmMaxQpm,omitempty"`
+	LlmRateLimitPause  string                     `json:"llmRateLimitPause,omitempty"`
+	LlmRateLimitJitter string                     `json:"llmRateLimitJitter,omitempty"`
+	LlmAcquireTimeout  string                     `json:"llmAcquireTimeout,omitempty"`
+	Runtime            string                     `json:"runtime,omitempty"`    // openclaw | copaw | hermes | qwenpaw | deepseek-harness | harness (default: openclaw)
+	Image              string                     `json:"image,omitempty"`      // custom Docker image
+	WorkerName         string                     `json:"workerName,omitempty"` // business/runtime identity (Matrix localpart, OSS path key)
+	Identity           string                     `json:"identity,omitempty"`
+	Soul               string                     `json:"soul,omitempty"`
+	Agents             string                     `json:"agents,omitempty"`
+	Skills             []string                   `json:"skills,omitempty"`       // built-in skills only
+	RemoteSkills       []RemoteSkillSource        `json:"remoteSkills,omitempty"` // remote skills from source registries
+	McpServers         []MCPServer                `json:"mcpServers,omitempty"`
+	Package            string                     `json:"package,omitempty"` // file://, http(s)://, or nacos://[user:pass@]host:port/...; optional ?authType=nacos|sts-agentteams|none
+	Expose             []ExposePort               `json:"expose,omitempty"`  // ports to expose via Higress gateway
+	ChannelPolicy      *ChannelPolicySpec         `json:"channelPolicy,omitempty"`
+	Channels           *ChannelsSpec              `json:"channels,omitempty"`
+	Resources          *AgentResourceRequirements `json:"resources,omitempty"`
+	IdleTimeout        string                     `json:"idleTimeout,omitempty"`
 
 	// ContainerManaged indicates whether the controller should manage
 	// container lifecycle for this worker. When false, container
