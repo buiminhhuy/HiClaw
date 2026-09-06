@@ -29,6 +29,7 @@ type DockerConfig struct {
 	OpenHumanWorkerImage       string // default openhuman worker image (AGENTTEAMS_OPENHUMAN_WORKER_IMAGE)
 	QwenPawWorkerImage         string // default qwenpaw worker image (AGENTTEAMS_QWENPAW_WORKER_IMAGE)
 	DeepSeekHarnessWorkerImage string // default DeepSeek Harness worker image (AGENTTEAMS_DEEPSEEK_HARNESS_WORKER_IMAGE)
+	HarnessWorkerImage         string // default harness worker image (AGENTTEAMS_HARNESS_WORKER_IMAGE)
 	DefaultNetwork             string // default Docker network (default "agentteams-net")
 }
 
@@ -122,6 +123,8 @@ func (d *DockerBackend) Create(ctx context.Context, req CreateRequest) (*WorkerR
 			image = d.config.QwenPawWorkerImage
 		case req.Runtime == RuntimeDeepSeekHarness && d.config.DeepSeekHarnessWorkerImage != "":
 			image = d.config.DeepSeekHarnessWorkerImage
+		case req.Runtime == RuntimeHarness && d.config.HarnessWorkerImage != "":
+			image = d.config.HarnessWorkerImage
 		default:
 			image = d.config.WorkerImage
 		}
