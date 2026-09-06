@@ -9,9 +9,13 @@
 #   PIP_INDEX_URL               - PyPI mirror (default: official)
 #   NPM_REGISTRY                - npm registry (default: official)
 #   *_CLI_VERSION               - pinned CLI agent versions (see below)
+#   BAZELISK_ARCH                - amd64/arm64; selects the pre-fetched bazelisk-linux-<arch>
+#                                   binary the Makefile places in the build context
 #
 # Build context: ./harness/ plus the named context `shared` -> ./shared/lib
 #   docker build --build-context shared=./shared/lib -f harness/Dockerfile ./harness/
+# Use `make build-harness-worker` instead of invoking docker build directly —
+# it fetches bazelisk-linux-<arch> into ./harness/ before the build (see BAZELISK_ARCH above).
 # ============================================================
 
 ARG HIGRESS_REGISTRY=higress-registry.cn-hangzhou.cr.aliyuncs.com
@@ -71,11 +75,13 @@ RUN npm config set registry "${NPM_REGISTRY}" && \
         "mcporter@${MCPORTER_VERSION}" && \
     rm -rf /root/.npm
 
-# Install Bazelisk as native binary named `bazel` (no Node.js wrapper overhead)
-RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
-    curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-${ARCH}" \
-         -o /usr/local/bin/bazel && \
-    chmod +x /usr/local/bin/bazel
+# Install Bazelisk as native binary named `bazel` (no Node.js wrapper overhead).
+# Binary is fetched by the Makefile on the host and passed in via build context,
+# not curled here: GitHub's TLS chain fails verification from inside the
+# BuildKit container on some corporate networks even though the host trusts it.
+ARG BAZELISK_ARCH=amd64
+COPY bazelisk-linux-${BAZELISK_ARCH} /usr/local/bin/bazel
+RUN chmod +x /usr/local/bin/bazel
 
 # Python venv
 RUN python3 -m venv /opt/venv/harness
