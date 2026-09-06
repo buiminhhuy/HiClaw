@@ -38,6 +38,9 @@
 #   AGENTTEAMS_INSTALL_QWENPAW_WORKER_IMAGE Override QwenPaw worker image (e.g., local build)
 #   AGENTTEAMS_INSTALL_HERMES_WORKER_IMAGE Override hermes worker image (e.g., local build)
 #   AGENTTEAMS_INSTALL_DEEPSEEK_HARNESS_WORKER_IMAGE Override experimental DeepSeek Harness worker image
+#   AGENTTEAMS_INSTALL_HARNESS_WORKER_IMAGE Set the harness worker image (Claude Code / Codex /
+#                                      OpenCode / Gemini CLI). Opt-in: the image is not published
+#                                      in the default registry, so it is only wired when set.
 #   AGENTTEAMS_NACOS_REGISTRY_URI          Default Nacos registry URI for Worker market search/import
 #                                      (default: nacos://market.agentteams.io:80/public)
 #   AGENTTEAMS_NACOS_USERNAME              Default Nacos username for nacos:// package imports (optional)
@@ -1138,6 +1141,7 @@ COPAW_WORKER_IMAGE="${AGENTTEAMS_INSTALL_COPAW_WORKER_IMAGE:-}"
 QWENPAW_WORKER_IMAGE="${AGENTTEAMS_INSTALL_QWENPAW_WORKER_IMAGE:-}"
 HERMES_WORKER_IMAGE="${AGENTTEAMS_INSTALL_HERMES_WORKER_IMAGE:-}"
 DEEPSEEK_HARNESS_WORKER_IMAGE="${AGENTTEAMS_INSTALL_DEEPSEEK_HARNESS_WORKER_IMAGE:-}"
+HARNESS_WORKER_IMAGE="${AGENTTEAMS_INSTALL_HARNESS_WORKER_IMAGE:-}"
 CONTROLLER_IMAGE="${AGENTTEAMS_INSTALL_CONTROLLER_IMAGE:-}"
 
 resolve_image_tags() {
@@ -1161,6 +1165,9 @@ resolve_image_tags() {
     if ! _supports_deepseek_harness "${AGENTTEAMS_VERSION}"; then
         DEEPSEEK_HARNESS_WORKER_IMAGE=""
     fi
+    # Harness Worker is opt-in: no image is published under the default
+    # registry, so it stays empty unless the operator points at their own build.
+    HARNESS_WORKER_IMAGE="${AGENTTEAMS_INSTALL_HARNESS_WORKER_IMAGE:-}"
 }
 
 manager_image_for_runtime() {
@@ -3590,6 +3597,7 @@ AGENTTEAMS_COPAW_WORKER_IMAGE=${COPAW_WORKER_IMAGE}
 AGENTTEAMS_QWENPAW_WORKER_IMAGE=${QWENPAW_WORKER_IMAGE}
 AGENTTEAMS_HERMES_WORKER_IMAGE=${HERMES_WORKER_IMAGE}
 AGENTTEAMS_DEEPSEEK_HARNESS_WORKER_IMAGE=${DEEPSEEK_HARNESS_WORKER_IMAGE}
+AGENTTEAMS_HARNESS_WORKER_IMAGE=${HARNESS_WORKER_IMAGE}
 
 # Default Worker runtime (qwenpaw | openclaw | hermes | copaw | deepseek-harness [experimental])
 AGENTTEAMS_DEFAULT_WORKER_RUNTIME=${AGENTTEAMS_DEFAULT_WORKER_RUNTIME:-qwenpaw}
@@ -3767,6 +3775,7 @@ EOF
     _pull_image "${QWENPAW_WORKER_IMAGE}" "install.image.worker_exists" "install.image.pulling_worker"
     _pull_image "${HERMES_WORKER_IMAGE}" "install.image.worker_exists" "install.image.pulling_worker"
     _pull_image "${DEEPSEEK_HARNESS_WORKER_IMAGE}" "install.image.worker_exists" "install.image.pulling_worker"
+    _pull_image "${HARNESS_WORKER_IMAGE}" "install.image.worker_exists" "install.image.pulling_worker"
 
     # --- Pre-upgrade: extract Matrix passwords from running old containers ---
     # Only needed when upgrading FROM old architecture (v1.0.9) TO embedded.
@@ -3993,6 +4002,7 @@ CREDEOF
             -e "${_ctrl_env_prefix}QWENPAW_WORKER_IMAGE=${QWENPAW_WORKER_IMAGE}"
             -e "${_ctrl_env_prefix}HERMES_WORKER_IMAGE=${HERMES_WORKER_IMAGE}"
             -e "${_ctrl_env_prefix}DEEPSEEK_HARNESS_WORKER_IMAGE=${DEEPSEEK_HARNESS_WORKER_IMAGE}"
+            -e "${_ctrl_env_prefix}HARNESS_WORKER_IMAGE=${HARNESS_WORKER_IMAGE}"
             -e "${_ctrl_env_prefix}MATRIX_DOMAIN=${_matrix_domain}"
             -e "${_ctrl_env_prefix}ELEMENT_HOMESERVER_URL=http://127.0.0.1:${AGENTTEAMS_PORT_GATEWAY}"
             -e "${_ctrl_env_prefix}MATRIX_URL=http://127.0.0.1:6167"
@@ -4259,6 +4269,7 @@ CREDEOF
                     -e AGENTTEAMS_QWENPAW_WORKER_IMAGE="${QWENPAW_WORKER_IMAGE}" \
                     -e AGENTTEAMS_HERMES_WORKER_IMAGE="${HERMES_WORKER_IMAGE}" \
                     -e AGENTTEAMS_DEEPSEEK_HARNESS_WORKER_IMAGE="${DEEPSEEK_HARNESS_WORKER_IMAGE}" \
+                    -e AGENTTEAMS_HARNESS_WORKER_IMAGE="${HARNESS_WORKER_IMAGE}" \
                     ${AGENTTEAMS_PROXY_ALLOWED_REGISTRIES:+-e AGENTTEAMS_PROXY_ALLOWED_REGISTRIES="${AGENTTEAMS_PROXY_ALLOWED_REGISTRIES}"} \
                     --restart unless-stopped \
                     "${_proxy_image}"

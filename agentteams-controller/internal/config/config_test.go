@@ -201,6 +201,22 @@ func TestBackendConfigsDefaultToIndependentDeepSeekHarnessVersion(t *testing.T) 
 	}
 }
 
+func TestBackendConfigsIncludeHarnessWorkerImage(t *testing.T) {
+	t.Setenv("AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/harness-worker:test")
+
+	cfg := LoadConfig()
+
+	for name, got := range map[string]string{
+		"docker":  cfg.DockerConfig().HarnessWorkerImage,
+		"k8s":     cfg.K8sConfig().HarnessWorkerImage,
+		"sandbox": cfg.SandboxConfig().HarnessWorkerImage,
+	} {
+		if want := "agentteams/harness-worker:test"; got != want {
+			t.Fatalf("%s HarnessWorkerImage = %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestLoadConfigPanicsOnInvalidManagerSpec(t *testing.T) {
 	t.Setenv("AGENTTEAMS_MANAGER_SPEC", "{")
 

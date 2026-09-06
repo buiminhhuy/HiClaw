@@ -16,6 +16,7 @@ on:
       - 'qwenpaw/**'
       - 'hermes/**'
       - 'deepseek-harness/**'
+      - 'harness/**'
       - 'plugins/teamharness/adapters/qwenpaw/**'
       - 'plugins/teamharness/adapters/deepseek-harness/**'
       - 'plugins/workerflow/adapters/qwenpaw/**'
@@ -38,6 +39,7 @@ on:
       - 'qwenpaw/**'
       - 'hermes/**'
       - 'deepseek-harness/**'
+      - 'harness/**'
       - 'plugins/teamharness/adapters/qwenpaw/**'
       - 'plugins/teamharness/adapters/deepseek-harness/**'
       - 'plugins/workerflow/adapters/qwenpaw/**'
@@ -62,6 +64,7 @@ on:
           - copaw
           - qwenpaw
           - hermes
+          - harness
         default: 'both'
       model:
         description: 'LLM model to use'
@@ -326,6 +329,48 @@ jobs:
           name: image-${{ matrix.target }}
           path: /tmp/agentteams-${{ matrix.target }}.tar.gz
           retention-days: 1
+
+  # Step 2b: Build the Harness Worker image for validation only.
+  # Deliberately NOT uploaded as an `image-*` artifact: the test shards load
+  # every such artifact, and this image ships Node plus four CLI agents. The
+  # in-cluster harness runtime has no e2e shard yet — it needs real Claude Code
+  # / Codex credentials — so this job only proves the Dockerfile still builds.
+  build-harness-image:
+    needs: [build-base]
+    if: always() && needs.build-base.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Free Up Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Download controller image
+        uses: actions/download-artifact@v4
+        with:
+          name: image-controller
+          path: /tmp
+
+      - name: Load controller image
+        run: gunzip -c /tmp/agentteams-controller.tar.gz | docker load
+
+      - name: Build image
+        run: |
+          make build-harness-worker \
+            HIGRESS_REGISTRY=higress-registry.us-west-1.cr.aliyuncs.com \
+            DOCKER_BUILD_ARGS="--build-arg APT_MIRROR= --build-arg PIP_INDEX_URL=https://pypi.org/simple/"
 
   # Step 3: Run test shards in parallel, each on its own runner with isolated cluster
   integration-tests:
