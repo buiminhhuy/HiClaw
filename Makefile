@@ -80,8 +80,10 @@ comma := ,
 
 ifdef DOCKER_PLATFORM
   PLATFORM_FLAG = --platform $(DOCKER_PLATFORM)
+  HARNESS_BAZELISK_ARCH := $(subst linux/,,$(DOCKER_PLATFORM))
 else
   PLATFORM_FLAG =
+  HARNESS_BAZELISK_ARCH := $(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 endif
 
 REGISTRY_ARG = --build-arg HIGRESS_REGISTRY=$(HIGRESS_REGISTRY)
@@ -227,10 +229,18 @@ build-deepseek-harness-worker: ## Build DeepSeek Harness Worker image
 
 build-harness-worker: ## Build Harness Worker image (Claude Code / Codex / OpenCode / Gemini CLI)
 	@echo "==> Building Harness Worker image: $(LOCAL_HARNESS_WORKER) (registry: $(HIGRESS_REGISTRY))"
+	@# Fetched here (host) rather than via curl inside the Dockerfile: on this
+	@# network the corporate TLS-intercepting proxy's root CA is trusted by the
+	@# host but not by the BuildKit container's CA bundle, so the identical curl
+	@# fails there with "self-signed certificate in certificate chain".
+	curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-$(HARNESS_BAZELISK_ARCH)" \
+		-o ./harness/bazelisk-linux-$(HARNESS_BAZELISK_ARCH)
 	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(SHARED_LIB_CTX) $(DOCKER_BUILD_ARGS) \
 		--build-arg AGENTTEAMS_CONTROLLER_IMAGE=$(LOCAL_CONTROLLER_BUILD_IMAGE) \
+		--build-arg BAZELISK_ARCH=$(HARNESS_BAZELISK_ARCH) \
 		-t $(LOCAL_HARNESS_WORKER) \
 		./harness/
+	@rm -f ./harness/bazelisk-linux-$(HARNESS_BAZELISK_ARCH)
 
 # ---------- Tag ----------
 
