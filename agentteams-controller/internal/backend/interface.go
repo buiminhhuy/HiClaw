@@ -39,6 +39,7 @@ const (
 	RuntimeQwenPaw         = "qwenpaw"
 	RuntimeDeepSeekHarness = "deepseek-harness"
 	RuntimeCodex           = "codex"
+	RuntimeHarness         = "harness"
 )
 
 const (
@@ -63,7 +64,8 @@ func NormalizeAuthTokenExpirationSeconds(seconds int64) int64 {
 // ValidRuntime reports whether r is a recognized runtime value.
 // An empty string is valid — backends resolve it via ResolveRuntime.
 func ValidRuntime(r string) bool {
-	return r == "" || r == RuntimeOpenClaw || r == RuntimeCopaw || r == RuntimeHermes || r == RuntimeOpenHuman || r == RuntimeQwenPaw || r == RuntimeDeepSeekHarness || r == RuntimeCodex
+	return r == "" || r == RuntimeOpenClaw || r == RuntimeCopaw || r == RuntimeHermes || r == RuntimeOpenHuman || r == RuntimeQwenPaw || r == RuntimeDeepSeekHarness || r == RuntimeCodex ||
+		r == RuntimeHarness
 }
 
 // UsesMemberRuntimeConfig reports whether a runtime consumes the

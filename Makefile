@@ -32,6 +32,7 @@ HERMES_WORKER_IMAGE  ?= $(REGISTRY)/$(REPO)/agentteams-harness-hermes
 QWENPAW_WORKER_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-harness-qwenpaw
 OPENHUMAN_WORKER_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-harness-openhuman
 DEEPSEEK_HARNESS_WORKER_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-harness-deepseek
+HARNESS_WORKER_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-harness-worker
 OPENCLAW_BASE_IMAGE  ?= $(REGISTRY)/$(REPO)/openclaw-base
 CONTROLLER_IMAGE     ?= $(REGISTRY)/$(REPO)/agentteams-controller
 EMBEDDED_IMAGE       ?= $(REGISTRY)/$(REPO)/agentteams-embedded
@@ -41,6 +42,7 @@ MANAGER_QWENPAW_TAG  ?= $(MANAGER_QWENPAW_IMAGE):$(VERSION)
 WORKER_TAG         ?= $(WORKER_IMAGE):$(VERSION)
 HERMES_WORKER_TAG  ?= $(HERMES_WORKER_IMAGE):$(VERSION)
 QWENPAW_WORKER_TAG ?= $(QWENPAW_WORKER_IMAGE):$(VERSION)
+HARNESS_WORKER_TAG ?= $(HARNESS_WORKER_IMAGE):$(VERSION)
 OPENHUMAN_WORKER_TAG ?= $(OPENHUMAN_WORKER_IMAGE):$(VERSION)
 DEEPSEEK_HARNESS_WORKER_TAG ?= $(DEEPSEEK_HARNESS_WORKER_IMAGE):$(DEEPSEEK_HARNESS_WORKER_VERSION)
 OPENCLAW_BASE_TAG  ?= $(OPENCLAW_BASE_IMAGE):$(VERSION)
@@ -55,6 +57,7 @@ LOCAL_HERMES_WORKER  = agentteams/agentteams-harness-hermes:$(VERSION)
 LOCAL_QWENPAW_WORKER = agentteams/agentteams-harness-qwenpaw:$(VERSION)
 LOCAL_OPENHUMAN_WORKER = agentteams/agentteams-harness-openhuman:$(VERSION)
 LOCAL_DEEPSEEK_HARNESS_WORKER = agentteams/agentteams-harness-deepseek:$(VERSION)
+LOCAL_HARNESS_WORKER = agentteams/harness-worker:$(VERSION)
 LOCAL_OPENCLAW_BASE  = agentteams/openclaw-base:$(VERSION)
 LOCAL_CONTROLLER     = agentteams/agentteams-controller:$(VERSION)
 LOCAL_CONTROLLER_BUILD_IMAGE ?= $(LOCAL_CONTROLLER)
@@ -107,11 +110,11 @@ LINES          ?= 50
 # ---------- Phony targets ----------
 
 .PHONY: all build build-openclaw-base build-agentteams-controller build-embedded build-manager build-manager-qwenpaw build-worker build-hermes-worker build-openhuman-worker \
-        build-qwenpaw-worker build-deepseek-harness-worker \
+        build-qwenpaw-worker build-deepseek-harness-worker build-harness-worker \
         tag push push-openclaw-base push-agentteams-controller push-embedded push-manager push-manager-qwenpaw push-worker push-hermes-worker push-openhuman-worker \
-        push-qwenpaw-worker push-deepseek-harness-worker push-openclaw-base-platform push-openclaw-base-manifest \
+        push-qwenpaw-worker push-deepseek-harness-worker push-harness-worker push-openclaw-base-platform push-openclaw-base-manifest \
         push-native push-native-manager push-native-manager-qwenpaw push-native-worker push-native-hermes-worker push-native-openhuman-worker \
-        push-native-qwenpaw-worker push-native-deepseek-harness-worker \
+        push-native-qwenpaw-worker push-native-deepseek-harness-worker push-native-harness-worker \
         buildx-setup \
         test test-quick test-installed test-embedded \
         install install-embedded uninstall uninstall-embedded replay replay-log \
@@ -215,6 +218,13 @@ build-deepseek-harness-worker: build-agentteams-controller ## Build DeepSeek Har
 		-t $(LOCAL_DEEPSEEK_HARNESS_WORKER) \
 		deepseek-harness
 
+build-harness-worker: ## Build Harness Worker image (Claude Code / Codex / OpenCode / Gemini CLI)
+	@echo "==> Building Harness Worker image: $(LOCAL_HARNESS_WORKER) (registry: $(HIGRESS_REGISTRY))"
+	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(SHARED_LIB_CTX) $(DOCKER_BUILD_ARGS) \
+		--build-arg AGENTTEAMS_CONTROLLER_IMAGE=$(LOCAL_CONTROLLER_BUILD_IMAGE) \
+		-t $(LOCAL_HARNESS_WORKER) \
+		./harness/
+
 # ---------- Tag ----------
 
 tag: build ## Tag images for registry push
@@ -223,12 +233,14 @@ tag: build ## Tag images for registry push
 	docker tag $(LOCAL_HERMES_WORKER) $(HERMES_WORKER_TAG)
 	docker tag $(LOCAL_OPENHUMAN_WORKER) $(OPENHUMAN_WORKER_TAG)
 	docker tag $(LOCAL_QWENPAW_WORKER) $(QWENPAW_WORKER_TAG)
+	docker tag $(LOCAL_HARNESS_WORKER) $(HARNESS_WORKER_TAG)
 ifeq ($(PUSH_LATEST),yes)
 	docker tag $(LOCAL_MANAGER) $(MANAGER_IMAGE):latest
 	docker tag $(LOCAL_WORKER) $(WORKER_IMAGE):latest
 	docker tag $(LOCAL_HERMES_WORKER) $(HERMES_WORKER_IMAGE):latest
 	docker tag $(LOCAL_OPENHUMAN_WORKER) $(OPENHUMAN_WORKER_IMAGE):latest
 	docker tag $(LOCAL_QWENPAW_WORKER) $(QWENPAW_WORKER_IMAGE):latest
+	docker tag $(LOCAL_HARNESS_WORKER) $(HARNESS_WORKER_IMAGE):latest
 	docker tag $(LOCAL_CONTROLLER) $(CONTROLLER_IMAGE):latest
 	@echo "==> Images tagged as $(VERSION) and latest"
 else
@@ -478,6 +490,33 @@ else
 		-f deepseek-harness/Dockerfile deepseek-harness
 endif
 
+push-harness-worker: buildx-setup ## Build + push multi-arch Harness Worker image
+	@echo "==> Building + pushing multi-arch Harness Worker: $(HARNESS_WORKER_TAG) [$(MULTIARCH_PLATFORMS)]"
+ifeq ($(IS_PODMAN),1)
+	-podman manifest rm $(HARNESS_WORKER_TAG) 2>/dev/null
+	$(foreach plat,$(subst $(comma), ,$(MULTIARCH_PLATFORMS)), \
+		echo "  -> Building Harness Worker for $(plat)..." && \
+		podman build --platform $(plat) \
+			$(REGISTRY_ARG) $(SHARED_LIB_CTX) $(DOCKER_BUILD_ARGS) \
+			--build-arg AGENTTEAMS_CONTROLLER_IMAGE=$(CONTROLLER_TAG) \
+			--manifest $(HARNESS_WORKER_TAG) \
+			./harness/ && ) true
+	podman manifest push --all $(HARNESS_WORKER_TAG) docker://$(HARNESS_WORKER_TAG)
+	$(if $(PUSH_LATEST), \
+		podman manifest push --all $(HARNESS_WORKER_TAG) docker://$(HARNESS_WORKER_IMAGE):latest && \
+		echo "  -> Also pushed :latest tag")
+else
+	docker buildx build \
+		--builder $(BUILDX_BUILDER) \
+		--platform $(MULTIARCH_PLATFORMS) \
+		$(REGISTRY_ARG) $(SHARED_LIB_CTX) $(DOCKER_BUILD_ARGS) \
+		--build-arg AGENTTEAMS_CONTROLLER_IMAGE=$(CONTROLLER_TAG) \
+		-t $(HARNESS_WORKER_TAG) \
+		$(if $(PUSH_LATEST),-t $(HARNESS_WORKER_IMAGE):latest) \
+		--push \
+		./harness/
+endif
+
 # ---------- Push native-arch only (dev use) ----------
 # WARNING: Pushing single-arch images will overwrite multi-arch manifests.
 # Only use for local development / testing, never for release.
@@ -526,6 +565,10 @@ push-native-qwenpaw-worker: build-qwenpaw-worker ## Push native-arch QwenPaw Wor
 push-native-deepseek-harness-worker: build-deepseek-harness-worker ## Push native-arch DeepSeek Harness Worker only (dev)
 	docker tag $(LOCAL_DEEPSEEK_HARNESS_WORKER) $(DEEPSEEK_HARNESS_WORKER_TAG)
 	docker push $(DEEPSEEK_HARNESS_WORKER_TAG)
+
+push-native-harness-worker: build-harness-worker ## Push native-arch Harness Worker only (dev)
+	docker tag $(LOCAL_HARNESS_WORKER) $(HARNESS_WORKER_TAG)
+	docker push $(HARNESS_WORKER_TAG)
 
 # ---------- Test ----------
 

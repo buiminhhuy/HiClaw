@@ -47,6 +47,9 @@
 #   AGENTTEAMS_INSTALL_HERMES_WORKER_IMAGE Override hermes worker image (e.g., local build)
 #   AGENTTEAMS_INSTALL_DEEPSEEK_HARNESS_WORKER_IMAGE Override experimental DeepSeek Harness worker image
 #   AGENTTEAMS_INSTALL_CODEX_WORKER_IMAGE Override Codex worker image
+#   AGENTTEAMS_INSTALL_HARNESS_WORKER_IMAGE Set the harness worker image (Claude Code / Codex /
+#                                      OpenCode / Gemini CLI). Opt-in: the image is not published
+#                                      in the default registry, so it is only wired when set.
 #   AGENTTEAMS_NACOS_REGISTRY_URI          Default Nacos registry URI for Worker market search/import
 #                                      (default: nacos://market.agentteams.io:80/public)
 #   AGENTTEAMS_NACOS_USERNAME              Default Nacos username for nacos:// package imports (optional)
@@ -1206,6 +1209,7 @@ HERMES_WORKER_IMAGE="${AGENTTEAMS_INSTALL_HERMES_WORKER_IMAGE:-}"
 OPENHUMAN_WORKER_IMAGE="${AGENTTEAMS_INSTALL_OPENHUMAN_WORKER_IMAGE:-}"
 CODEX_WORKER_IMAGE="${AGENTTEAMS_INSTALL_CODEX_WORKER_IMAGE:-${AGENTTEAMS_CODEX_WORKER_IMAGE:-}}"
 DEEPSEEK_HARNESS_WORKER_IMAGE="${AGENTTEAMS_INSTALL_DEEPSEEK_HARNESS_WORKER_IMAGE:-}"
+HARNESS_WORKER_IMAGE="${AGENTTEAMS_INSTALL_HARNESS_WORKER_IMAGE:-}"
 CONTROLLER_IMAGE="${AGENTTEAMS_INSTALL_CONTROLLER_IMAGE:-}"
 
 resolve_image_tags() {
@@ -1266,6 +1270,9 @@ resolve_image_tags() {
         MANAGER_IMAGE="${AGENTTEAMS_INSTALL_MANAGER_IMAGE:-${WORKER_IMAGE}}"
         MANAGER_QWENPAW_IMAGE="${AGENTTEAMS_INSTALL_MANAGER_QWENPAW_IMAGE:-${QWENPAW_WORKER_IMAGE}}"
     fi
+    # Harness Worker is opt-in: no image is published under the default
+    # registry, so it stays empty unless the operator points at their own build.
+    HARNESS_WORKER_IMAGE="${AGENTTEAMS_INSTALL_HARNESS_WORKER_IMAGE:-}"
 }
 
 manager_image_for_runtime() {
@@ -4325,6 +4332,7 @@ AGENTTEAMS_HERMES_WORKER_IMAGE=${HERMES_WORKER_IMAGE}
 AGENTTEAMS_OPENHUMAN_WORKER_IMAGE=${OPENHUMAN_WORKER_IMAGE}
 AGENTTEAMS_DEEPSEEK_HARNESS_WORKER_IMAGE=${DEEPSEEK_HARNESS_WORKER_IMAGE}
 AGENTTEAMS_CODEX_WORKER_IMAGE=${CODEX_WORKER_IMAGE}
+AGENTTEAMS_HARNESS_WORKER_IMAGE=${HARNESS_WORKER_IMAGE}
 
 # Default Worker runtime (qwenpaw | openclaw | hermes | copaw | deepseek-harness [experimental])
 AGENTTEAMS_DEFAULT_WORKER_RUNTIME=${AGENTTEAMS_DEFAULT_WORKER_RUNTIME:-qwenpaw}
@@ -4621,6 +4629,7 @@ CREDEOF
             -e "${_ctrl_env_prefix}OPENHUMAN_WORKER_IMAGE=${OPENHUMAN_WORKER_IMAGE}"
             -e "${_ctrl_env_prefix}DEEPSEEK_HARNESS_WORKER_IMAGE=${DEEPSEEK_HARNESS_WORKER_IMAGE}"
             -e "${_ctrl_env_prefix}CODEX_WORKER_IMAGE=${CODEX_WORKER_IMAGE}"
+            -e "${_ctrl_env_prefix}HARNESS_WORKER_IMAGE=${HARNESS_WORKER_IMAGE}"
             -e "${_ctrl_env_prefix}MATRIX_DOMAIN=${_matrix_domain}"
             -e "${_ctrl_env_prefix}ELEMENT_HOMESERVER_URL=http://127.0.0.1:${AGENTTEAMS_PORT_GATEWAY}"
             -e "${_ctrl_env_prefix}MATRIX_URL=http://127.0.0.1:6167"
@@ -4913,6 +4922,7 @@ CREDEOF
                     -e AGENTTEAMS_OPENHUMAN_WORKER_IMAGE="${OPENHUMAN_WORKER_IMAGE}" \
                     -e AGENTTEAMS_DEEPSEEK_HARNESS_WORKER_IMAGE="${DEEPSEEK_HARNESS_WORKER_IMAGE}" \
                     -e AGENTTEAMS_CODEX_WORKER_IMAGE="${CODEX_WORKER_IMAGE}" \
+                    -e AGENTTEAMS_HARNESS_WORKER_IMAGE="${HARNESS_WORKER_IMAGE}" \
                     ${AGENTTEAMS_PROXY_ALLOWED_REGISTRIES:+-e AGENTTEAMS_PROXY_ALLOWED_REGISTRIES="${AGENTTEAMS_PROXY_ALLOWED_REGISTRIES}"} \
                     --restart unless-stopped \
                     "${_proxy_image}"
