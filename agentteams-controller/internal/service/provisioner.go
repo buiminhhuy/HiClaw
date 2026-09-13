@@ -689,11 +689,11 @@ func (p *Provisioner) loadWorkerCredentials(ctx context.Context, credentialName 
 // (containerManaged:false) worker needs to start `harness-remote`: Matrix
 // identity/token, MinIO access key/secret, and the AI gateway consumer key.
 type LocalEnrollmentBundle struct {
-	MatrixUserID   string
-	MatrixToken    string
-	MinIOAccessKey string
-	MinIOSecretKey string
-	GatewayKey     string
+	MatrixUserID   string `json:"matrix_user_id"`
+	MatrixToken    string `json:"matrix_token"`
+	MinIOAccessKey string `json:"minio_access_key"`
+	MinIOSecretKey string `json:"minio_secret_key"`
+	GatewayKey     string `json:"gateway_key"`
 }
 
 // LocalEnrollmentBundle reads the credential bundle a normal reconcile has
