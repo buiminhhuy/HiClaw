@@ -10,12 +10,10 @@ from typing import Optional
 import typer
 
 from harness_worker.config import WorkerConfig
+from harness_worker.logging_setup import configure_logging
 from harness_worker.worker import Worker
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+configure_logging(logging.INFO)
 
 
 def main() -> None:
