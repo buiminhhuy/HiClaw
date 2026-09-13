@@ -247,7 +247,7 @@ func (a *Authorizer) authorizeHuman(caller *CallerIdentity, req AuthzRequest) er
 //
 // An allowlist, not a role with exceptions: everything not named here is
 // denied. Grants are added kind by kind, action by action, as the console
-// builds a screen that needs them (human: S4/S5; worker: S6) — never ahead of
+// builds a screen that needs them (human: S4/S5; worker: S6; team: S7) — never ahead of
 // the code that uses them. A role that quietly widens is how a scoped
 // identity becomes an admin one.
 //
@@ -295,7 +295,22 @@ func (a *Authorizer) authorizeManagement(caller *CallerIdentity, req AuthzReques
 			return deny(caller, req)
 		}
 
-	case "team", "project":
+	case "team":
+		// S7: admin-gated create/edit/delete, same shape and same gate as
+		// human/worker above. Create is a two-step operation from the console
+		// (Leader Worker, then Team) coordinated by the console's own applier,
+		// not by anything here — the controller's own validateTeamWorkerMembers
+		// still enforces "the referenced Worker must already exist" and "worker
+		// not already in another team" regardless, so this grant does not
+		// weaken those checks.
+		switch req.Action {
+		case ActionGet, ActionList, ActionCreate, ActionUpdate, ActionDelete:
+			return nil
+		default:
+			return deny(caller, req)
+		}
+
+	case "project":
 		if readOnly {
 			return nil
 		}

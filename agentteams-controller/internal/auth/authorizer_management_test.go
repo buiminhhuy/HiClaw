@@ -46,6 +46,14 @@ func TestManagementRoleAllowedSurfaces(t *testing.T) {
 		{Action: ActionDelete, ResourceKind: "worker", ResourceName: "alice"},
 		{Action: ActionWake, ResourceKind: "worker", ResourceName: "alice"},
 		{Action: ActionSleep, ResourceKind: "worker", ResourceName: "alice"},
+		// S7: admin-gated Team CRUD. Create is a two-step console operation
+		// (Leader Worker, then Team); the controller's own
+		// validateTeamWorkerMembers still enforces the ordering constraint
+		// regardless of this grant — see
+		// TestManagementTeamWritesAreAllowedButProjectIsNot.
+		{Action: ActionCreate, ResourceKind: "team"},
+		{Action: ActionUpdate, ResourceKind: "team", ResourceName: "research"},
+		{Action: ActionDelete, ResourceKind: "team", ResourceName: "research"},
 	} {
 		if err := az.Authorize(caller, req); err != nil {
 			t.Errorf("management should be allowed %s %s: %v", req.Action, req.ResourceKind, err)
@@ -67,11 +75,7 @@ func TestManagementRoleDeniedOnPrivilegedSurfaces(t *testing.T) {
 		{Action: ActionRefreshMatrixToken, ResourceKind: "credentials"},
 		// Gateway consumer binding.
 		{Action: ActionGateway, ResourceKind: "gateway"},
-		// Writes on team/project remain denied — only human and worker have
-		// admin-gated console screens today.
-		{Action: ActionCreate, ResourceKind: "team"},
-		{Action: ActionUpdate, ResourceKind: "team", ResourceName: "research"},
-		{Action: ActionDelete, ResourceKind: "team", ResourceName: "research"},
+		// Writes on project remain denied — no console screen needs them.
 		{Action: ActionCreate, ResourceKind: "project"},
 		{Action: ActionUpdate, ResourceKind: "project", ResourceName: "p-1"},
 		// Worker *behaviour*, as opposed to its CRUD/lifecycle above: these act
@@ -90,25 +94,23 @@ func TestManagementRoleDeniedOnPrivilegedSurfaces(t *testing.T) {
 	}
 }
 
-// Exactly two kinds get writes, and it is worth stating as its own test: the
+// Exactly three kinds get writes, and it is worth stating as its own test: the
 // next person to need "just one more" has to come here and add it
 // deliberately.
-func TestManagementHumanWritesAreAllowedOnlyOnHumanAndWorker(t *testing.T) {
+func TestManagementWritesAreAllowedOnlyOnHumanWorkerAndTeam(t *testing.T) {
 	az := NewAuthorizer()
 	caller := managementCaller()
 
-	for _, kind := range []string{"human", "worker"} {
+	for _, kind := range []string{"human", "worker", "team"} {
 		for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
 			if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: kind, ResourceName: "x"}); err != nil {
 				t.Errorf("%s %s should be allowed: %v", a, kind, err)
 			}
 		}
 	}
-	for _, kind := range []string{"team", "project"} {
-		for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
-			if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: kind}); err == nil {
-				t.Errorf("%s %s must still be denied", a, kind)
-			}
+	for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
+		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "project"}); err == nil {
+			t.Errorf("%s project must still be denied", a)
 		}
 	}
 }
@@ -128,6 +130,26 @@ func TestManagementWorkerWritesAreAllowedButTeamAndProjectAreNot(t *testing.T) {
 	for _, a := range []Action{ActionWorkerApproval, ActionWorkspaceFilesWrite} {
 		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "worker", ResourceName: "alice"}); err == nil {
 			t.Errorf("worker %s must still be denied", a)
+		}
+	}
+}
+
+// The team grant is CRUD only — there is no team-lifecycle or team-behaviour
+// action to keep denied the way worker has ActionWorkerApproval, but project
+// stays a useful negative control since it sits right next to team in the
+// authorizer's switch.
+func TestManagementTeamWritesAreAllowedButProjectIsNot(t *testing.T) {
+	az := NewAuthorizer()
+	caller := managementCaller()
+
+	for _, a := range []Action{ActionCreate, ActionUpdate, ActionDelete} {
+		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "team", ResourceName: "research"}); err != nil {
+			t.Errorf("team %s should be allowed: %v", a, err)
+		}
+	}
+	for _, a := range []Action{ActionCreate, ActionUpdate} {
+		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "project"}); err == nil {
+			t.Errorf("project %s must still be denied", a)
 		}
 	}
 }
