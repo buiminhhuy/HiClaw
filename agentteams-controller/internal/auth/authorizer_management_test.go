@@ -35,6 +35,10 @@ func TestManagementRoleAllowedSurfaces(t *testing.T) {
 		// see TestManagementHumanUpdateIsTheOnlyWriteAllowed for the boundary
 		// this role still keeps.
 		{Action: ActionUpdate, ResourceKind: "human", ResourceName: "huybui1"},
+		// S5: admin user management. Gated on Scope.Admin in the console, not
+		// here — see TestManagementHumanCreateAndDeleteAreAllowed.
+		{Action: ActionCreate, ResourceKind: "human"},
+		{Action: ActionDelete, ResourceKind: "human", ResourceName: "huybui1"},
 	} {
 		if err := az.Authorize(caller, req); err != nil {
 			t.Errorf("management should be allowed %s %s: %v", req.Action, req.ResourceKind, err)
@@ -63,8 +67,6 @@ func TestManagementRoleDeniedOnPrivilegedSurfaces(t *testing.T) {
 		{Action: ActionCreate, ResourceKind: "team"},
 		{Action: ActionUpdate, ResourceKind: "team", ResourceName: "research"},
 		{Action: ActionDelete, ResourceKind: "team", ResourceName: "research"},
-		{Action: ActionCreate, ResourceKind: "human"},
-		{Action: ActionDelete, ResourceKind: "human", ResourceName: "huybui1"},
 		{Action: ActionCreate, ResourceKind: "project"},
 		{Action: ActionUpdate, ResourceKind: "project", ResourceName: "p-1"},
 		// Worker lifecycle and behaviour.
@@ -85,22 +87,20 @@ func TestManagementRoleDeniedOnPrivilegedSurfaces(t *testing.T) {
 
 // Exactly one write, and it is worth stating as its own test: the next person
 // to need "just one more" has to come here and add it deliberately.
-func TestManagementHumanUpdateIsTheOnlyWriteAllowed(t *testing.T) {
+func TestManagementHumanWritesAreAllowedOnlyOnHuman(t *testing.T) {
 	az := NewAuthorizer()
 	caller := managementCaller()
 
-	if err := az.Authorize(caller, AuthzRequest{Action: ActionUpdate, ResourceKind: "human"}); err != nil {
-		t.Errorf("human update should be allowed: %v", err)
-	}
-	for _, kind := range []string{"worker", "team", "project"} {
-		if err := az.Authorize(caller, AuthzRequest{Action: ActionUpdate, ResourceKind: kind}); err == nil {
-			t.Errorf("%s update must still be denied", kind)
+	for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
+		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "human", ResourceName: "x"}); err != nil {
+			t.Errorf("human %s should be allowed: %v", a, err)
 		}
 	}
-	// Update on human does not imply create or delete on it.
-	for _, a := range []Action{ActionCreate, ActionDelete} {
-		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "human"}); err == nil {
-			t.Errorf("human %s must still be denied", a)
+	for _, kind := range []string{"worker", "team", "project"} {
+		for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
+			if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: kind}); err == nil {
+				t.Errorf("%s %s must still be denied", a, kind)
+			}
 		}
 	}
 }
