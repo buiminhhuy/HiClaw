@@ -87,6 +87,9 @@ func (a *Authorizer) Authorize(caller *CallerIdentity, req AuthzRequest) error {
 	case RoleHuman:
 		return a.authorizeHuman(caller, req)
 
+	case RoleManagement:
+		return a.authorizeManagement(caller, req)
+
 	case RoleWorker:
 		return a.authorizeWorker(caller, req)
 
@@ -234,6 +237,40 @@ func (a *Authorizer) authorizeHuman(caller *CallerIdentity, req AuthzRequest) er
 		}
 		return deny(caller, req)
 
+	default:
+		return deny(caller, req)
+	}
+}
+
+// authorizeManagement is the permission matrix for the Management Console
+// workload.
+//
+// An allowlist, not a role with exceptions: everything not named here is
+// denied, including every write. The console is a read surface today, so this
+// grants reads and nothing else. When the console gains a write path it gets
+// the specific actions it needs, in a change that has to touch this function —
+// which is the point. A role that quietly widens is how a scoped identity
+// becomes an admin one.
+//
+// Explicitly out of scope, and they must stay that way while this is a single
+// unsplit service:
+//   - credentials (STS, Matrix token refresh) — issuing worker credentials
+//   - gateway — consumer binding
+//   - worker-approval, workspace-files-write — they act on a worker's behaviour
+//
+// Note what this role does NOT do: it performs no scoping of its own. Whatever
+// the console shows a given person is decided by the console, not here. That is
+// a real transfer of responsibility and is documented in ADR-0010 (R2).
+func (a *Authorizer) authorizeManagement(caller *CallerIdentity, req AuthzRequest) error {
+	readOnly := req.Action == ActionGet || req.Action == ActionList
+	switch req.ResourceKind {
+	case "status":
+		return nil
+	case "worker", "team", "human", "project":
+		if readOnly {
+			return nil
+		}
+		return deny(caller, req)
 	default:
 		return deny(caller, req)
 	}

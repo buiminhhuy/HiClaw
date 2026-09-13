@@ -62,6 +62,13 @@ func (p ResourcePrefix) AdminName() string {
 	return p.effective() + "admin"
 }
 
+// ManagementName returns the Management Console ServiceAccount name, e.g.
+// "agentteams-management". Deliberately a separate SA from AdminName: the
+// console must not be able to borrow admin's unconditional access.
+func (p ResourcePrefix) ManagementName() string {
+	return p.effective() + "management"
+}
+
 // WorkerAppLabel returns the Pod "app" label value for workers, e.g.
 // "agentteams-worker". Purely decorative — useful for ad-hoc kubectl grouping
 // (`kubectl get pod -l app=agentteams-worker`) and external dashboards. No
@@ -136,6 +143,8 @@ func (p ResourcePrefix) ParseSAUsername(username string) (*CallerIdentity, error
 		return &CallerIdentity{Role: RoleAdmin, Username: "admin", ServiceAccountNamespace: saNamespace, ServiceAccountName: saName}, nil
 	case saName == p.ManagerDefaultName():
 		return &CallerIdentity{Role: RoleManager, Username: "manager", ServiceAccountNamespace: saNamespace, ServiceAccountName: saName}, nil
+	case saName == p.ManagementName():
+		return &CallerIdentity{Role: RoleManagement, Username: "management", ServiceAccountNamespace: saNamespace, ServiceAccountName: saName}, nil
 	case strings.HasPrefix(saName, p.WorkerNamePrefix()):
 		name := saName[len(p.WorkerNamePrefix()):]
 		return &CallerIdentity{Role: RoleWorker, Username: name, WorkerName: name, ServiceAccountNamespace: saNamespace, ServiceAccountName: saName}, nil
