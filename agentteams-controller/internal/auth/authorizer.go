@@ -246,11 +246,10 @@ func (a *Authorizer) authorizeHuman(caller *CallerIdentity, req AuthzRequest) er
 // workload.
 //
 // An allowlist, not a role with exceptions: everything not named here is
-// denied, including every write. The console is a read surface today, so this
-// grants reads and nothing else. When the console gains a write path it gets
-// the specific actions it needs, in a change that has to touch this function —
-// which is the point. A role that quietly widens is how a scoped identity
-// becomes an admin one.
+// denied. Grants are added kind by kind, action by action, as the console
+// builds a screen that needs them (human: S4/S5; worker: S6) — never ahead of
+// the code that uses them. A role that quietly widens is how a scoped
+// identity becomes an admin one.
 //
 // Explicitly out of scope, and they must stay that way while this is a single
 // unsplit service:
@@ -281,7 +280,22 @@ func (a *Authorizer) authorizeManagement(caller *CallerIdentity, req AuthzReques
 		}
 		return deny(caller, req)
 
-	case "worker", "team", "project":
+	case "worker":
+		// S6: admin-gated create/edit/lifecycle/delete, the same shape as the
+		// human grant above and for the same reason — the console gates the
+		// screen on Scope.Admin before a request is built, and this is what
+		// that gate is worth if it is ever bypassed. Delete is already
+		// self-defending upstream (409 while the worker is a team member;
+		// findTeamForMember runs before the client.Delete call), so this grant
+		// does not add a way around that check.
+		switch req.Action {
+		case ActionGet, ActionList, ActionCreate, ActionUpdate, ActionDelete, ActionWake, ActionSleep:
+			return nil
+		default:
+			return deny(caller, req)
+		}
+
+	case "team", "project":
 		if readOnly {
 			return nil
 		}
