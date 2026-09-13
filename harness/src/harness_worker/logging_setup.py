@@ -72,8 +72,11 @@ def configure_logging(level: int = logging.INFO) -> str:
     global ACTIVE_FORMAT
     choice = os.environ.get("AGENTTEAMS_LOG_FORMAT", "").strip().lower()
     if choice not in ("json", "text"):
-        in_cluster = os.path.exists("/var/run/secrets/kubernetes.io/serviceaccount/token")
-        choice = "json" if in_cluster else "text"
+        # KUBERNETES_SERVICE_HOST, not the service account token: worker pods
+        # deliberately run with automountServiceAccountToken disabled (they have
+        # no business talking to the API server), so the token file is absent
+        # even in-cluster. The kubelet injects this variable into every pod.
+        choice = "json" if os.environ.get("KUBERNETES_SERVICE_HOST") else "text"
     ACTIVE_FORMAT = choice
 
     handler = logging.StreamHandler()
