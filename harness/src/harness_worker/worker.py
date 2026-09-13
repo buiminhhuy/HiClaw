@@ -20,6 +20,14 @@ from harness_worker.config import WorkerConfig
 from harness_worker.harness import build_harness
 from harness_worker.matrix_relay import MatrixRelay
 from harness_worker.sync import FileSync, push_loop, sync_loop
+from harness_worker.telemetry import (
+    TURN_END,
+    TURN_START,
+    TurnContext,
+    emit,
+    emitter as telemetry_emitter,
+    new_span_id,
+)
 
 console = Console()
 
@@ -79,6 +87,7 @@ class Worker:
         # CLI session id per Matrix room. A single worker-wide session would
         # splice unrelated rooms into one conversation.
         self._sessions: Dict[str, str] = {}
+        telemetry_emitter.configure(worker_name=config.worker_name)
 
     async def run(self) -> None:
         if not await self.start():
@@ -274,7 +283,25 @@ class Worker:
                 limit=32 * 1024 * 1024,  # 32MB — handles large image/file tool results
             )
 
-            state: dict = {}
+            # Correlation identity for this turn. Rides in `state`, which is
+            # already threaded into `process_stream_line` — so harness adapters
+            # need no signature change and codex/gemini/opencode stay untouched.
+            ctx = TurnContext(
+                turn_id=new_span_id(),
+                worker=self.config.worker_name,
+                room_id=room_id,
+            )
+            state: dict = {"_ctx": ctx}
+            emit(
+                TURN_START,
+                ctx,
+                message=f"turn start: room={room_id} session={session_id}",
+                attributes={
+                    "gen_ai.system": self._harness.name,
+                    "agentteams.session_id": session_id,
+                    "agentteams.prompt_chars": len(message),
+                },
+            )
 
             async def _run() -> str:
                 # Drain stderr concurrently to avoid pipe buffer deadlock
@@ -315,13 +342,51 @@ class Worker:
             if new_sid and session_id != new_sid:
                 self._save_session(room_id, new_sid)
 
+            emit(
+                TURN_END,
+                ctx,
+                message=f"turn end: room={room_id} session={new_sid}",
+                attributes={
+                    "agentteams.outcome": "ok",
+                    "agentteams.session_id": new_sid,
+                    "agentteams.reply_chars": len(text),
+                    "agentteams.tool_calls": state.get("activity_count", 0),
+                    "agentteams.duration_ms": int((time.time() - ctx.started_at) * 1000),
+                    # Totals reported by the harness itself (tokens, cost). Absent
+                    # for adapters that do not stream — see telemetry scope in ADR-0010.
+                    **(state.get("_result_summary") or {}),
+                },
+            )
             return text, new_sid
 
         except asyncio.TimeoutError:
             logger.error("Harness invocation timed out after %ds", timeout_seconds)
+            # Outcome is recorded but deliberately not called a failure of the
+            # agent: a timeout says we stopped watching, not that nothing ran.
+            emit(
+                TURN_END,
+                ctx,
+                severity="ERROR",
+                message=f"turn timed out after {timeout_seconds}s",
+                attributes={
+                    "agentteams.outcome": "timeout",
+                    "agentteams.duration_ms": int((time.time() - ctx.started_at) * 1000),
+                },
+            )
             return "Sorry, the request timed out. Please try again.", session_id
         except Exception as exc:
             logger.error("Harness invocation failed: %s", exc)
+            emit(
+                TURN_END,
+                ctx,
+                severity="ERROR",
+                message=f"turn failed: {exc}",
+                attributes={
+                    "agentteams.outcome": "error",
+                    "agentteams.error.type": type(exc).__name__,
+                    "agentteams.duration_ms": int((time.time() - ctx.started_at) * 1000),
+                },
+            )
             return f"Sorry, an error occurred: {exc}", session_id
 
     @property

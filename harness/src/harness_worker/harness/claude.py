@@ -51,6 +51,15 @@ from pathlib import Path
 from typing import Any
 
 from harness_worker.harness.base import BaseHarness, register_harness
+from harness_worker.telemetry import (
+    LLM_REQUEST,
+    SESSION_INIT,
+    TOOL_CALL,
+    TOOL_RESULT,
+    emit,
+    new_span_id,
+    summarize_tool_args,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -539,6 +548,16 @@ class ClaudeHarness(BaseHarness):
             if event.get("subtype") == "init":
                 state["session_id"] = event.get("session_id")
                 logger.info("claude session init: %s", state["session_id"])
+                emit(
+                    SESSION_INIT,
+                    state.get("_ctx"),
+                    message=f"claude session init: {state['session_id']}",
+                    attributes={
+                        "gen_ai.system": "claude",
+                        "agentteams.session_id": state["session_id"],
+                        "gen_ai.request.model": event.get("model"),
+                    },
+                )
 
         # --- SSE pass-through events (fallback) ---
         elif event_type == "content_block_start":
@@ -577,6 +596,17 @@ class ClaudeHarness(BaseHarness):
             dur = event.get("duration_ms")
             turns = event.get("num_turns")
             total_calls = state.get("activity_count", 0)
+            # Handed to the TURN_END event in worker.py rather than emitted here:
+            # one terminal event per turn is easier to reason about than two.
+            state["_result_summary"] = {
+                "gen_ai.usage.input_tokens": usage.get("input_tokens"),
+                "gen_ai.usage.output_tokens": usage.get("output_tokens"),
+                "gen_ai.usage.cache_read_input_tokens": usage.get("cache_read_input_tokens"),
+                "gen_ai.usage.cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
+                "agentteams.cost_usd": event.get("total_cost_usd"),
+                "agentteams.claude_duration_ms": dur,
+                "agentteams.num_turns": turns,
+            }
             overflow = total_calls - _MAX_ACTIVITY_LINES
             # Overflow marker comes first so it appears before the stats footer.
             if overflow > 0:
@@ -604,6 +634,7 @@ class ClaudeHarness(BaseHarness):
 
     def _handle_assistant_message(self, event: dict, state: dict) -> None:
         msg = event.get("message", {})
+        self._emit_llm_request(msg, state)
         for block in msg.get("content", []):
             btype = block.get("type")
             if btype == "text":
@@ -612,6 +643,43 @@ class ClaudeHarness(BaseHarness):
                     state.setdefault("text_chunks", []).append(text)
             elif btype == "tool_use":
                 self._log_tool_use(block.get("name", "unknown"), block.get("input") or {}, state)
+
+    def _emit_llm_request(self, msg: dict, state: dict) -> None:
+        """One event per assistant message — i.e. per LLM call, not per turn.
+
+        The stream already carries `message.usage` on every assistant message;
+        only the final `result` aggregate was ever being read. Per-call usage is
+        what makes "which step got expensive" answerable at all, and cache
+        tokens matter more than raw input tokens for real cost.
+        """
+        usage = msg.get("usage") or {}
+        if not usage:
+            return
+        emit(
+            LLM_REQUEST,
+            state.get("_ctx"),
+            span_id=new_span_id(),
+            message=(
+                "claude llm call: model=%s in=%s out=%s cache_read=%s cache_write=%s"
+                % (
+                    msg.get("model"),
+                    usage.get("input_tokens"),
+                    usage.get("output_tokens"),
+                    usage.get("cache_read_input_tokens"),
+                    usage.get("cache_creation_input_tokens"),
+                )
+            ),
+            attributes={
+                "gen_ai.system": "claude",
+                "gen_ai.request.model": msg.get("model"),
+                "gen_ai.usage.input_tokens": usage.get("input_tokens"),
+                "gen_ai.usage.output_tokens": usage.get("output_tokens"),
+                "gen_ai.usage.cache_read_input_tokens": usage.get("cache_read_input_tokens"),
+                "gen_ai.usage.cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
+                "gen_ai.response.finish_reason": msg.get("stop_reason"),
+                "agentteams.service_tier": usage.get("service_tier"),
+            },
+        )
 
     def _handle_user_message(self, event: dict, state: dict) -> None:
         msg = event.get("message", {})
@@ -636,6 +704,21 @@ class ClaudeHarness(BaseHarness):
                 logger.info("claude tool_result: %s", preview)
                 if preview and state.get("activity_count", 0) <= _MAX_ACTIVITY_LINES:
                     state.setdefault("text_chunks", []).append(f"\n> ✅ `{preview[:80]}`\n")
+
+            # Size and outcome only. Tool output is the single richest source of
+            # customer data in the whole stream, so it never leaves this process.
+            spans = state.get("_tool_spans") or []
+            emit(
+                TOOL_RESULT,
+                state.get("_ctx"),
+                span_id=spans.pop(0) if spans else None,
+                severity="ERROR" if is_err else "INFO",
+                message=f"claude tool result: {'error' if is_err else 'ok'}",
+                attributes={
+                    "agentteams.tool.is_error": is_err,
+                    "agentteams.tool.result_chars": len(text),
+                },
+            )
 
     def _log_completed_tool(self, tool_data: dict, state: dict) -> None:
         raw = "".join(tool_data["input_fragments"])
@@ -696,6 +779,18 @@ class ClaudeHarness(BaseHarness):
         if count < _MAX_ACTIVITY_LINES:
             state.setdefault("text_chunks", []).append(f"\n> {self._format_tool_ui(name, args)}\n")
         state["activity_count"] = count + 1
+
+        # Arguments are summarised, never stored: they routinely carry file
+        # contents and credentials. See telemetry.summarize_tool_args.
+        span = new_span_id()
+        state.setdefault("_tool_spans", []).append(span)
+        emit(
+            TOOL_CALL,
+            state.get("_ctx"),
+            span_id=span,
+            message=f"claude tool call: {name}",
+            attributes={"agentteams.tool.seq": count, **summarize_tool_args(name, args)},
+        )
 
     def parse_output(self, stdout_bytes: bytes) -> tuple[str, str | None]:
         state: dict = {}

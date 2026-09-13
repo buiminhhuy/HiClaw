@@ -24,13 +24,13 @@ from typing import Optional
 import typer
 
 from harness_worker.config import WorkerConfig
+from harness_worker.logging_setup import configure_logging
 from harness_worker.remote_worker import RemoteWorker
 from harness_worker.worker import Worker
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# Local machine → defaults to human-readable text; override with
+# AGENTTEAMS_LOG_FORMAT=json when shipping a local worker's logs somewhere.
+configure_logging(logging.INFO)
 
 app = typer.Typer(
     add_completion=False,
