@@ -268,13 +268,15 @@ func (a *Authorizer) authorizeManagement(caller *CallerIdentity, req AuthzReques
 		return nil
 
 	case "human":
-		// Update is allowed so the console can serve profile edits (S4). Note
-		// what this does and does not mean: the controller cannot tell a profile
-		// edit from a privilege change, so *the console* is what keeps this
-		// narrow — its field policy refuses everything except displayName and
-		// email, and its edit form has no field for permissionLevel or scope at
-		// all. If that were ever bypassed, this grant is what it would cost.
-		if readOnly || req.Action == ActionUpdate {
+		// Update/Create/Delete are allowed so the console can serve both self
+		// profile edits (S4) and admin user management (S5). The controller
+		// cannot tell a profile edit from a privilege change or a routine
+		// account from a deletion that force-leaves every room — so *the
+		// console* is what keeps this narrow: field policy for self-service
+		// (S4) has no permissionLevel/scope field at all, and S5's admin path
+		// is gated on Scope.Admin before a request is even built. If either
+		// gate were bypassed, this grant is what it would cost.
+		if readOnly || req.Action == ActionUpdate || req.Action == ActionCreate || req.Action == ActionDelete {
 			return nil
 		}
 		return deny(caller, req)
