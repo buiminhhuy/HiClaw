@@ -54,6 +54,9 @@ func TestManagementRoleAllowedSurfaces(t *testing.T) {
 		{Action: ActionCreate, ResourceKind: "team"},
 		{Action: ActionUpdate, ResourceKind: "team", ResourceName: "research"},
 		{Action: ActionDelete, ResourceKind: "team", ResourceName: "research"},
+		// S16: local worker onboarding reads one named worker's already-
+		// provisioned bootstrap bundle — see TestManagementLocalEnrollIsNotCredentialIssuance.
+		{Action: ActionLocalEnroll, ResourceKind: "worker", ResourceName: "alice"},
 	} {
 		if err := az.Authorize(caller, req); err != nil {
 			t.Errorf("management should be allowed %s %s: %v", req.Action, req.ResourceKind, err)
@@ -150,6 +153,28 @@ func TestManagementTeamWritesAreAllowedButProjectIsNot(t *testing.T) {
 	for _, a := range []Action{ActionCreate, ActionUpdate} {
 		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "project"}); err == nil {
 			t.Errorf("project %s must still be denied", a)
+		}
+	}
+}
+
+// ActionLocalEnroll (S16) is a read of what reconcile already persisted, not
+// credential issuance. This test is the line between the two: management
+// gets the former on "worker" but must still be denied the latter on
+// "credentials" — one grant existing must never imply the other.
+func TestManagementLocalEnrollIsNotCredentialIssuance(t *testing.T) {
+	az := NewAuthorizer()
+	caller := managementCaller()
+
+	if err := az.Authorize(caller, AuthzRequest{Action: ActionLocalEnroll, ResourceKind: "worker", ResourceName: "alice"}); err != nil {
+		t.Errorf("local-enroll on worker should be allowed: %v", err)
+	}
+	for _, req := range []AuthzRequest{
+		{Action: ActionLocalEnroll, ResourceKind: "credentials"},
+		{Action: ActionSTS, ResourceKind: "credentials"},
+		{Action: ActionRefreshMatrixToken, ResourceKind: "credentials"},
+	} {
+		if err := az.Authorize(caller, req); err == nil {
+			t.Errorf("management must NOT be allowed %s %s", req.Action, req.ResourceKind)
 		}
 	}
 }
