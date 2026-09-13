@@ -26,6 +26,39 @@ import (
 // optimistic locking conflicts when the controller updates status between Get and Update.
 const k8sUpdateMaxRetries = 3
 
+// errPreconditionFailed reports that the caller's If-Match no longer matches.
+var errPreconditionFailed = errors.New("precondition failed")
+
+// checkIfMatch implements opt-in compare-and-set on update.
+//
+// Without an If-Match header the behaviour is exactly as before: the retry loop
+// re-reads and applies the change, last writer wins. That is fine for a single
+// client and silently destructive for two — the second editor's save overwrites
+// the first with a form that was rendered before it existed, and neither person
+// is told.
+//
+// With the header, a caller states which version it edited. If the object has
+// moved since, the update is refused with 409 so the caller can re-read and show
+// the difference. Opt-in rather than mandatory so existing clients (agt, the
+// Manager agent, workers) are unaffected.
+//
+// The value compared is metadata.resourceVersion, which also changes on status
+// writes. A spurious 409 is therefore possible, and that is the right way round:
+// a false conflict costs a re-read, a missed conflict costs someone's edit.
+func checkIfMatch(r *http.Request, obj client.Object) error {
+	want := strings.TrimSpace(r.Header.Get("If-Match"))
+	if want == "" {
+		return nil
+	}
+	// Tolerate the quoted ETag form; HTTP spells entity tags "abc", and a
+	// caller copying the header format should not silently never match.
+	want = strings.Trim(want, `"`)
+	if want != obj.GetResourceVersion() {
+		return errPreconditionFailed
+	}
+	return nil
+}
+
 // ResourceHandler handles declarative CRUD operations on CRs.
 //
 // Team CRs reference independently managed Worker CRs. Worker CRUD always
@@ -271,6 +304,14 @@ func (h *ResourceHandler) UpdateWorker(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Compare-and-set before any mutation: a stale editor must be told, not
+		// merged in behind the other one.
+		if err := checkIfMatch(r, &worker); err != nil {
+			httputil.WriteError(w, http.StatusConflict,
+				"resource changed since it was read (If-Match did not match); re-read and try again")
+			return
+		}
+
 		if req.Model != "" {
 			worker.Spec.Model = req.Model
 		}
@@ -497,6 +538,14 @@ func (h *ResourceHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Compare-and-set before any mutation: a stale editor must be told, not
+		// merged in behind the other one.
+		if err := checkIfMatch(r, &team); err != nil {
+			httputil.WriteError(w, http.StatusConflict,
+				"resource changed since it was read (If-Match did not match); re-read and try again")
+			return
+		}
+
 		if req.Description != "" {
 			team.Spec.Description = req.Description
 		}
@@ -635,6 +684,14 @@ func (h *ResourceHandler) UpdateHuman(w http.ResponseWriter, r *http.Request) {
 		plBefore := human.Spec.PermissionLevel
 		teamsBefore := human.Spec.AccessibleTeams
 		workersBefore := human.Spec.AccessibleWorkers
+
+		// Compare-and-set before any mutation: a stale editor must be told, not
+		// merged in behind the other one.
+		if err := checkIfMatch(r, &human); err != nil {
+			httputil.WriteError(w, http.StatusConflict,
+				"resource changed since it was read (If-Match did not match); re-read and try again")
+			return
+		}
 
 		if req.PermissionLevel != nil && (*req.PermissionLevel < 1 || *req.PermissionLevel > 3) {
 			httputil.WriteError(w, http.StatusBadRequest, "permissionLevel must be 1 (admin), 2 (team), or 3 (worker)")
@@ -1135,6 +1192,7 @@ func (h *ResourceHandler) DeleteManager(w http.ResponseWriter, r *http.Request) 
 
 func workerToResponse(w *v1beta1.Worker) WorkerResponse {
 	resp := WorkerResponse{
+		ResourceVersion:  w.ResourceVersion,
 		Name:             w.Name,
 		WorkerName:       w.Spec.WorkerName,
 		Phase:            w.Status.Phase,
@@ -1224,21 +1282,22 @@ func sanitizeMCPURLForL3(raw string) string {
 
 func teamToResponse(t *v1beta1.Team) TeamResponse {
 	resp := TeamResponse{
-		Name:           t.Name,
-		TeamName:       t.Spec.EffectiveTeamName(t.Name),
-		Phase:          t.Status.Phase,
-		Description:    t.Spec.Description,
-		Admin:          t.Spec.Admin,
-		HumanMembers:   t.Spec.HumanMembers,
-		WorkerMembers:  t.Spec.WorkerMembers,
-		HeartbeatEvery: t.Spec.HeartbeatEvery,
-		TeamRoomID:     t.Status.TeamRoomID,
-		LeaderDMRoomID: t.Status.LeaderDMRoomID,
-		LeaderReady:    t.Status.LeaderReady,
-		ReadyWorkers:   t.Status.ReadyWorkers,
-		TotalWorkers:   t.Status.TotalWorkers,
-		Message:        t.Status.Message,
-		SubagentModel:  t.Spec.SubagentModel,
+		ResourceVersion: t.ResourceVersion,
+		Name:            t.Name,
+		TeamName:        t.Spec.EffectiveTeamName(t.Name),
+		Phase:           t.Status.Phase,
+		Description:     t.Spec.Description,
+		Admin:           t.Spec.Admin,
+		HumanMembers:    t.Spec.HumanMembers,
+		WorkerMembers:   t.Spec.WorkerMembers,
+		HeartbeatEvery:  t.Spec.HeartbeatEvery,
+		TeamRoomID:      t.Status.TeamRoomID,
+		LeaderDMRoomID:  t.Status.LeaderDMRoomID,
+		LeaderReady:     t.Status.LeaderReady,
+		ReadyWorkers:    t.Status.ReadyWorkers,
+		TotalWorkers:    t.Status.TotalWorkers,
+		Message:         t.Status.Message,
+		SubagentModel:   t.Spec.SubagentModel,
 	}
 	if resp.Phase == "" {
 		resp.Phase = "Pending"
@@ -1286,6 +1345,7 @@ func managerToResponse(m *v1beta1.Manager) ManagerResponse {
 
 func humanToResponse(h *v1beta1.Human) HumanResponse {
 	resp := HumanResponse{
+		ResourceVersion:   h.ResourceVersion,
 		Name:              h.Name,
 		Phase:             h.Status.Phase,
 		DisplayName:       h.Spec.DisplayName,

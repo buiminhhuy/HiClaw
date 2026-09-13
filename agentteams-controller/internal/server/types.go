@@ -64,6 +64,10 @@ type UpdateWorkerRequest struct {
 }
 
 type WorkerResponse struct {
+	// ResourceVersion is the K8s resourceVersion of the object this response was
+	// built from. Clients that want to avoid clobbering a concurrent edit send
+	// it back in If-Match; see the CAS handling in resource_handler.go.
+	ResourceVersion  string `json:"resourceVersion,omitempty"`
 	Name             string `json:"name"`
 	WorkerName       string `json:"workerName,omitempty"`
 	Phase            string `json:"phase"`
@@ -135,6 +139,10 @@ type UpdateTeamRequest struct {
 }
 
 type TeamResponse struct {
+	// ResourceVersion is the K8s resourceVersion of the object this response was
+	// built from. Clients that want to avoid clobbering a concurrent edit send
+	// it back in If-Match; see the CAS handling in resource_handler.go.
+	ResourceVersion    string                       `json:"resourceVersion,omitempty"`
 	Name               string                       `json:"name"`
 	TeamName           string                       `json:"teamName,omitempty"`
 	Phase              string                       `json:"phase"`
@@ -193,6 +201,10 @@ type UpdateHumanRequest struct {
 }
 
 type HumanResponse struct {
+	// ResourceVersion is the K8s resourceVersion of the object this response was
+	// built from. Clients that want to avoid clobbering a concurrent edit send
+	// it back in If-Match; see the CAS handling in resource_handler.go.
+	ResourceVersion   string   `json:"resourceVersion,omitempty"`
 	Name              string   `json:"name"`
 	Phase             string   `json:"phase"`
 	DisplayName       string   `json:"displayName"`
