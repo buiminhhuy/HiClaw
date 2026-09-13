@@ -73,3 +73,41 @@ func (h *CredentialsHandler) RefreshMatrixToken(w http.ResponseWriter, r *http.R
 		"access_token": result.MatrixToken,
 	})
 }
+
+// LocalEnrollment handles POST /api/v1/workers/{name}/local-enrollment.
+//
+// Read-only disclosure of a worker's already-provisioned bootstrap bundle
+// (Matrix token, MinIO access key/secret, gateway key) for the Management
+// Console's Local Worker onboarding screen (S16 — the console renders a
+// copy-paste `harness-remote` startup command from it). Deliberately
+// narrower than RefreshSTS/RefreshMatrixToken: it never mints, rotates, or
+// refreshes anything, it only exposes what a normal reconcile already wrote
+// to the worker's own credential Secret. See auth.ActionLocalEnroll.
+func (h *CredentialsHandler) LocalEnrollment(w http.ResponseWriter, r *http.Request) {
+	if h.provisioner == nil {
+		httputil.WriteError(w, http.StatusServiceUnavailable, "provisioner not available")
+		return
+	}
+
+	name := r.PathValue("name")
+	if name == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "worker name required")
+		return
+	}
+
+	caller := auth.CallerFromContext(r.Context())
+	callerRole, callerName := "unknown", "unknown"
+	if caller != nil {
+		callerRole, callerName = caller.Role, caller.Username
+	}
+	log.Printf("[INFO] local enrollment bundle for worker %s requested by %s/%s", name, callerRole, callerName)
+
+	bundle, err := h.provisioner.LocalEnrollmentBundle(r.Context(), name)
+	if err != nil {
+		log.Printf("[WARN] local enrollment bundle for worker %s: %v", name, err)
+		httputil.WriteError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, bundle)
+}

@@ -250,6 +250,9 @@ func NewHTTPServer(addr string, deps ServerDeps) *HTTPServer {
 	ch := NewCredentialsHandler(deps.STS, deps.Provisioner)
 	mux.Handle("POST /api/v1/credentials/sts", mw.RequireAuthz(authpkg.ActionSTS, "credentials", nil)(http.HandlerFunc(ch.RefreshSTS)))
 	mux.Handle("POST /api/v1/credentials/matrix-token", mw.RequireAuthz(authpkg.ActionRefreshMatrixToken, "credentials", nil)(http.HandlerFunc(ch.RefreshMatrixToken)))
+	// S16: read-only bundle for one named worker, scoped like the worker CRUD
+	// routes above (nameFn) rather than self-scoped like STS/matrix-token.
+	mux.Handle("POST /api/v1/workers/{name}/local-enrollment", mw.RequireAuthz(authpkg.ActionLocalEnroll, "worker", nameFn)(http.HandlerFunc(ch.LocalEnrollment)))
 
 	// --- AppService management ---
 	ash := NewAppServiceHandler(deps.MatrixConfig)

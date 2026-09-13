@@ -43,6 +43,7 @@ const (
 	// non-admin scope=deployment; 404 anti-probing for cross-team).
 	ActionSkillPublish       Action = "skill-publish"
 	ActionWorkerSkillPreload Action = "worker-skill-preload"
+	ActionLocalEnroll        Action = "local-enroll"
 )
 
 // AuthzRequest describes the resource being accessed.
@@ -253,7 +254,11 @@ func (a *Authorizer) authorizeHuman(caller *CallerIdentity, req AuthzRequest) er
 //
 // Explicitly out of scope, and they must stay that way while this is a single
 // unsplit service:
-//   - credentials (STS, Matrix token refresh) — issuing worker credentials
+//   - credentials (STS, Matrix token refresh) — issuing or rotating worker
+//     credentials. ActionLocalEnroll (below, on "worker") is deliberately NOT
+//     this: it is a pure read of what a worker's own reconcile already wrote
+//     to its credential Secret, for S16's local-worker onboarding screen. It
+//     never mints or rotates anything, so it does not reopen this line.
 //   - gateway — consumer binding
 //   - worker-approval, workspace-files-write — they act on a worker's behaviour
 //
@@ -290,6 +295,13 @@ func (a *Authorizer) authorizeManagement(caller *CallerIdentity, req AuthzReques
 		// does not add a way around that check.
 		switch req.Action {
 		case ActionGet, ActionList, ActionCreate, ActionUpdate, ActionDelete, ActionWake, ActionSleep:
+			return nil
+		case ActionLocalEnroll:
+			// S16: read-only disclosure of a worker's already-provisioned
+			// bootstrap bundle (Matrix token, MinIO user/password, gateway
+			// key) so the console can render a copy-paste `harness-remote`
+			// startup command. See the package doc comment above for why
+			// this is not the same grant as ActionSTS/ActionRefreshMatrixToken.
 			return nil
 		default:
 			return deny(caller, req)

@@ -685,6 +685,41 @@ func (p *Provisioner) loadWorkerCredentials(ctx context.Context, credentialName 
 	return p.creds.Load(ctx, credentialName)
 }
 
+// LocalEnrollmentBundle is the bootstrap credential set a local
+// (containerManaged:false) worker needs to start `harness-remote`: Matrix
+// identity/token, MinIO access key/secret, and the AI gateway consumer key.
+type LocalEnrollmentBundle struct {
+	MatrixUserID   string
+	MatrixToken    string
+	MinIOAccessKey string
+	MinIOSecretKey string
+	GatewayKey     string
+}
+
+// LocalEnrollmentBundle reads the credential bundle a normal reconcile has
+// already provisioned for workerName — it never mints, rotates, or refreshes
+// anything (that is RefreshWorkerCredentials/ForceRefreshMatrixToken, and
+// deliberately not exposed to the Management Console; see
+// auth.ActionLocalEnroll). A worker whose first reconcile has not completed
+// yet has no Matrix token in its Secret; that is reported as an error rather
+// than triggering a login, so this call has no side effects.
+func (p *Provisioner) LocalEnrollmentBundle(ctx context.Context, workerName string) (*LocalEnrollmentBundle, error) {
+	creds, err := p.loadWorkerCredentials(ctx, workerName)
+	if err != nil {
+		return nil, fmt.Errorf("load credentials for %s: %w", workerName, err)
+	}
+	if creds == nil || creds.MatrixToken == "" {
+		return nil, fmt.Errorf("worker %q has no provisioned credentials yet (still reconciling?)", workerName)
+	}
+	return &LocalEnrollmentBundle{
+		MatrixUserID:   p.MatrixUserID(workerName),
+		MatrixToken:    creds.MatrixToken,
+		MinIOAccessKey: workerName,
+		MinIOSecretKey: creds.MinIOPassword,
+		GatewayKey:     creds.GatewayKey,
+	}, nil
+}
+
 // RefreshManagerCredentials loads persisted credentials for the Manager and
 // returns a Matrix access token, reusing the cached token when present. The
 // Manager CR name (e.g. "default") differs from the Matrix username (always
