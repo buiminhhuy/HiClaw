@@ -39,6 +39,13 @@ func TestManagementRoleAllowedSurfaces(t *testing.T) {
 		// here — see TestManagementHumanCreateAndDeleteAreAllowed.
 		{Action: ActionCreate, ResourceKind: "human"},
 		{Action: ActionDelete, ResourceKind: "human", ResourceName: "huybui1"},
+		// S6: admin-gated worker CRUD and lifecycle. Same shape, same gate —
+		// see TestManagementWorkerWritesAreAllowedButTeamAndProjectAreNot.
+		{Action: ActionCreate, ResourceKind: "worker"},
+		{Action: ActionUpdate, ResourceKind: "worker", ResourceName: "alice"},
+		{Action: ActionDelete, ResourceKind: "worker", ResourceName: "alice"},
+		{Action: ActionWake, ResourceKind: "worker", ResourceName: "alice"},
+		{Action: ActionSleep, ResourceKind: "worker", ResourceName: "alice"},
 	} {
 		if err := az.Authorize(caller, req); err != nil {
 			t.Errorf("management should be allowed %s %s: %v", req.Action, req.ResourceKind, err)
@@ -60,18 +67,16 @@ func TestManagementRoleDeniedOnPrivilegedSurfaces(t *testing.T) {
 		{Action: ActionRefreshMatrixToken, ResourceKind: "credentials"},
 		// Gateway consumer binding.
 		{Action: ActionGateway, ResourceKind: "gateway"},
-		// Writes of every shape, on every kind it can read.
-		{Action: ActionCreate, ResourceKind: "worker"},
-		{Action: ActionUpdate, ResourceKind: "worker", ResourceName: "alice"},
-		{Action: ActionDelete, ResourceKind: "worker", ResourceName: "alice"},
+		// Writes on team/project remain denied — only human and worker have
+		// admin-gated console screens today.
 		{Action: ActionCreate, ResourceKind: "team"},
 		{Action: ActionUpdate, ResourceKind: "team", ResourceName: "research"},
 		{Action: ActionDelete, ResourceKind: "team", ResourceName: "research"},
 		{Action: ActionCreate, ResourceKind: "project"},
 		{Action: ActionUpdate, ResourceKind: "project", ResourceName: "p-1"},
-		// Worker lifecycle and behaviour.
-		{Action: ActionWake, ResourceKind: "worker", ResourceName: "alice"},
-		{Action: ActionSleep, ResourceKind: "worker", ResourceName: "alice"},
+		// Worker *behaviour*, as opposed to its CRUD/lifecycle above: these act
+		// on what the worker is allowed to do, not on the resource itself, and
+		// stay denied.
 		{Action: ActionWorkerApproval, ResourceKind: "worker", ResourceName: "alice"},
 		{Action: ActionWorkspaceFilesWrite, ResourceKind: "worker", ResourceName: "alice"},
 		// Kinds it has no business touching at all.
@@ -85,22 +90,44 @@ func TestManagementRoleDeniedOnPrivilegedSurfaces(t *testing.T) {
 	}
 }
 
-// Exactly one write, and it is worth stating as its own test: the next person
-// to need "just one more" has to come here and add it deliberately.
-func TestManagementHumanWritesAreAllowedOnlyOnHuman(t *testing.T) {
+// Exactly two kinds get writes, and it is worth stating as its own test: the
+// next person to need "just one more" has to come here and add it
+// deliberately.
+func TestManagementHumanWritesAreAllowedOnlyOnHumanAndWorker(t *testing.T) {
 	az := NewAuthorizer()
 	caller := managementCaller()
 
-	for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
-		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "human", ResourceName: "x"}); err != nil {
-			t.Errorf("human %s should be allowed: %v", a, err)
+	for _, kind := range []string{"human", "worker"} {
+		for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
+			if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: kind, ResourceName: "x"}); err != nil {
+				t.Errorf("%s %s should be allowed: %v", a, kind, err)
+			}
 		}
 	}
-	for _, kind := range []string{"worker", "team", "project"} {
+	for _, kind := range []string{"team", "project"} {
 		for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
 			if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: kind}); err == nil {
 				t.Errorf("%s %s must still be denied", a, kind)
 			}
+		}
+	}
+}
+
+// The worker grant is CRUD *and* lifecycle (wake/sleep), because S6 needs
+// both; it is not worker-behaviour actions like approval or workspace writes,
+// which stay denied regardless of resource kind.
+func TestManagementWorkerWritesAreAllowedButTeamAndProjectAreNot(t *testing.T) {
+	az := NewAuthorizer()
+	caller := managementCaller()
+
+	for _, a := range []Action{ActionCreate, ActionUpdate, ActionDelete, ActionWake, ActionSleep} {
+		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "worker", ResourceName: "alice"}); err != nil {
+			t.Errorf("worker %s should be allowed: %v", a, err)
+		}
+	}
+	for _, a := range []Action{ActionWorkerApproval, ActionWorkspaceFilesWrite} {
+		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "worker", ResourceName: "alice"}); err == nil {
+			t.Errorf("worker %s must still be denied", a)
 		}
 	}
 }
