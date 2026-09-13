@@ -26,6 +26,20 @@ const (
 	// distinction is carried by AccessibleWorkers (non-empty for L3), not
 	// by a separate role value.
 	RoleHuman = "human"
+	// RoleManagement is the Management Console workload, authenticated by the
+	// projected token of the "agentteams-management" ServiceAccount.
+	//
+	// It exists because the Matrix-token path resolves only L2 humans
+	// (see MatrixTokenAuthenticator.resolveHuman), so an L1 admin signing in to
+	// the console gets 401 from every endpoint while holding a token the
+	// homeserver accepts. The console needs an identity of its own to read on
+	// their behalf.
+	//
+	// It is NOT RoleAdmin. Admin is unconditional full access; this role is an
+	// explicit allowlist (authorizeManagement) and is currently read-only. Write
+	// actions are added when the code that performs them exists — granting them
+	// ahead of a caller is granting privilege on speculation.
+	RoleManagement = "management"
 )
 
 // DefaultAudience is the SA token audience used by TokenReview when a caller
