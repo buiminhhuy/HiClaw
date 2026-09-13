@@ -266,11 +266,25 @@ func (a *Authorizer) authorizeManagement(caller *CallerIdentity, req AuthzReques
 	switch req.ResourceKind {
 	case "status":
 		return nil
-	case "worker", "team", "human", "project":
+
+	case "human":
+		// Update is allowed so the console can serve profile edits (S4). Note
+		// what this does and does not mean: the controller cannot tell a profile
+		// edit from a privilege change, so *the console* is what keeps this
+		// narrow — its field policy refuses everything except displayName and
+		// email, and its edit form has no field for permissionLevel or scope at
+		// all. If that were ever bypassed, this grant is what it would cost.
+		if readOnly || req.Action == ActionUpdate {
+			return nil
+		}
+		return deny(caller, req)
+
+	case "worker", "team", "project":
 		if readOnly {
 			return nil
 		}
 		return deny(caller, req)
+
 	default:
 		return deny(caller, req)
 	}
