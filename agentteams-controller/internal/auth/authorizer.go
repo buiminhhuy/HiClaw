@@ -248,9 +248,10 @@ func (a *Authorizer) authorizeHuman(caller *CallerIdentity, req AuthzRequest) er
 //
 // An allowlist, not a role with exceptions: everything not named here is
 // denied. Grants are added kind by kind, action by action, as the console
-// builds a screen that needs them (human: S4/S5; worker: S6; team: S7) — never ahead of
-// the code that uses them. A role that quietly widens is how a scoped
-// identity becomes an admin one.
+// builds a screen that needs them (human: S4/S5; worker: S6; team: S7;
+// project create/update: S12 scheduler) — never ahead of the code that uses
+// them. A role that quietly widens is how a scoped identity becomes an admin
+// one.
 //
 // Explicitly out of scope, and they must stay that way while this is a single
 // unsplit service:
@@ -323,10 +324,31 @@ func (a *Authorizer) authorizeManagement(caller *CallerIdentity, req AuthzReques
 		}
 
 	case "project":
-		if readOnly {
+		// Phase 5 (scheduler, GOV-10..14): a schedule dispatches by creating a
+		// Project and, for a pinned Worker target, replanning it with an
+		// assignee — both ActionCreate/ActionUpdate, per the routing table in
+		// http.go (pause/resume/replan/cancel/complete are all ActionUpdate;
+		// there is no project ActionDelete in the API at all).
+		//
+		// This grant is intentionally NOT team-scoped here, the same way
+		// worker/team/human above are not: RoleManagement has no caller.Team to
+		// scope against (requireSameTeam, used by RoleTeamLeader's identical
+		// case below, needs exactly that and would always fail for this
+		// caller). The scoping this needs — "does this schedule's owner Human
+		// actually have a grant on the target Team" — has to happen in the
+		// console before the request is ever built, same transfer of
+		// responsibility the package doc comment already states for
+		// human/worker/team. Unlike those three, this is NOT an admin-gated
+		// screen: the plan's design for the scheduler is explicitly
+		// self-service (any Human with a Team grant may schedule against it),
+		// so the console-side gate here is a role_grant/accessibleTeams check
+		// per request, not Scope.Admin.
+		switch req.Action {
+		case ActionGet, ActionList, ActionCreate, ActionUpdate:
 			return nil
+		default:
+			return deny(caller, req)
 		}
-		return deny(caller, req)
 
 	default:
 		return deny(caller, req)
