@@ -29,6 +29,11 @@ func TestManagementRoleAllowedSurfaces(t *testing.T) {
 		{Action: ActionGet, ResourceKind: "human", ResourceName: "huybui1"},
 		{Action: ActionList, ResourceKind: "project"},
 		{Action: ActionGet, ResourceKind: "project", ResourceName: "p-1"},
+		// S12 scheduler: dispatch is create-project (+ replan for a pinned
+		// Worker target) and pause/resume/replan/cancel/complete, all
+		// ActionUpdate — see TestManagementProjectWritesAreNowAllowedForTheScheduler.
+		{Action: ActionCreate, ResourceKind: "project"},
+		{Action: ActionUpdate, ResourceKind: "project", ResourceName: "p-1"},
 		{Action: ActionGet, ResourceKind: "status"},
 		// Profile edits (S4). The controller cannot distinguish a display-name
 		// change from a privilege change, so the narrowing lives in the console;
@@ -40,7 +45,7 @@ func TestManagementRoleAllowedSurfaces(t *testing.T) {
 		{Action: ActionCreate, ResourceKind: "human"},
 		{Action: ActionDelete, ResourceKind: "human", ResourceName: "huybui1"},
 		// S6: admin-gated worker CRUD and lifecycle. Same shape, same gate —
-		// see TestManagementWorkerWritesAreAllowedButTeamAndProjectAreNot.
+		// see TestManagementWorkerWritesAreAllowedButBehaviourActionsAreNot.
 		{Action: ActionCreate, ResourceKind: "worker"},
 		{Action: ActionUpdate, ResourceKind: "worker", ResourceName: "alice"},
 		{Action: ActionDelete, ResourceKind: "worker", ResourceName: "alice"},
@@ -49,8 +54,7 @@ func TestManagementRoleAllowedSurfaces(t *testing.T) {
 		// S7: admin-gated Team CRUD. Create is a two-step console operation
 		// (Leader Worker, then Team); the controller's own
 		// validateTeamWorkerMembers still enforces the ordering constraint
-		// regardless of this grant — see
-		// TestManagementTeamWritesAreAllowedButProjectIsNot.
+		// regardless of this grant — see TestManagementTeamWritesAreAllowed.
 		{Action: ActionCreate, ResourceKind: "team"},
 		{Action: ActionUpdate, ResourceKind: "team", ResourceName: "research"},
 		{Action: ActionDelete, ResourceKind: "team", ResourceName: "research"},
@@ -78,9 +82,9 @@ func TestManagementRoleDeniedOnPrivilegedSurfaces(t *testing.T) {
 		{Action: ActionRefreshMatrixToken, ResourceKind: "credentials"},
 		// Gateway consumer binding.
 		{Action: ActionGateway, ResourceKind: "gateway"},
-		// Writes on project remain denied — no console screen needs them.
-		{Action: ActionCreate, ResourceKind: "project"},
-		{Action: ActionUpdate, ResourceKind: "project", ResourceName: "p-1"},
+		// Project create/update is no longer in this list — see
+		// TestManagementProjectWritesAreNowAllowedForTheScheduler for why, and
+		// TestManagementRoleAllowedSurfaces for where it now lives.
 		// Worker *behaviour*, as opposed to its CRUD/lifecycle above: these act
 		// on what the worker is allowed to do, not on the resource itself, and
 		// stay denied.
@@ -97,10 +101,16 @@ func TestManagementRoleDeniedOnPrivilegedSurfaces(t *testing.T) {
 	}
 }
 
-// Exactly three kinds get writes, and it is worth stating as its own test: the
-// next person to need "just one more" has to come here and add it
-// deliberately.
-func TestManagementWritesAreAllowedOnlyOnHumanWorkerAndTeam(t *testing.T) {
+// Four kinds get writes, and it is worth stating as its own test: the next
+// person to need "just one more" has to come here and add it deliberately.
+// Project is the odd one out — Create/Update only, no Delete, because that is
+// the entire write surface the Project API exposes (see
+// TestManagementProjectWritesAreNowAllowedForTheScheduler for why it is here
+// at all, and for the same reason ActionDelete on "project" is asserted
+// denied below rather than omitted: there is no such route to grant, so this
+// pins that a future project-delete capability still has to be added here
+// deliberately rather than falling out of some other change).
+func TestManagementWritesAreAllowedOnlyOnHumanWorkerTeamAndProject(t *testing.T) {
 	az := NewAuthorizer()
 	caller := managementCaller()
 
@@ -111,17 +121,20 @@ func TestManagementWritesAreAllowedOnlyOnHumanWorkerAndTeam(t *testing.T) {
 			}
 		}
 	}
-	for _, a := range []Action{ActionUpdate, ActionCreate, ActionDelete} {
-		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "project"}); err == nil {
-			t.Errorf("%s project must still be denied", a)
+	for _, a := range []Action{ActionUpdate, ActionCreate} {
+		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "project", ResourceName: "p-1"}); err != nil {
+			t.Errorf("%s project should be allowed: %v", a, err)
 		}
+	}
+	if err := az.Authorize(caller, AuthzRequest{Action: ActionDelete, ResourceKind: "project", ResourceName: "p-1"}); err == nil {
+		t.Error("ActionDelete project must still be denied — there is no such route to grant")
 	}
 }
 
 // The worker grant is CRUD *and* lifecycle (wake/sleep), because S6 needs
 // both; it is not worker-behaviour actions like approval or workspace writes,
 // which stay denied regardless of resource kind.
-func TestManagementWorkerWritesAreAllowedButTeamAndProjectAreNot(t *testing.T) {
+func TestManagementWorkerWritesAreAllowedButBehaviourActionsAreNot(t *testing.T) {
 	az := NewAuthorizer()
 	caller := managementCaller()
 
@@ -138,10 +151,8 @@ func TestManagementWorkerWritesAreAllowedButTeamAndProjectAreNot(t *testing.T) {
 }
 
 // The team grant is CRUD only — there is no team-lifecycle or team-behaviour
-// action to keep denied the way worker has ActionWorkerApproval, but project
-// stays a useful negative control since it sits right next to team in the
-// authorizer's switch.
-func TestManagementTeamWritesAreAllowedButProjectIsNot(t *testing.T) {
+// action to keep denied the way worker has ActionWorkerApproval.
+func TestManagementTeamWritesAreAllowed(t *testing.T) {
 	az := NewAuthorizer()
 	caller := managementCaller()
 
@@ -150,10 +161,32 @@ func TestManagementTeamWritesAreAllowedButProjectIsNot(t *testing.T) {
 			t.Errorf("team %s should be allowed: %v", a, err)
 		}
 	}
-	for _, a := range []Action{ActionCreate, ActionUpdate} {
-		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "project"}); err == nil {
-			t.Errorf("project %s must still be denied", a)
+}
+
+// Phase 5 (S12 scheduler): dispatch is create-project, plus replan/pause/
+// resume/cancel/complete, all ActionUpdate — see the "project" case comment
+// in authorizer.go for why this grant is deliberately not team-scoped here
+// the way RoleTeamLeader's identical case is (RoleManagement has no
+// caller.Team to scope against), and for why that makes it the console's job
+// to check the schedule owner's own grant on the target Team before ever
+// building the request. This used to be a denied surface (see git history /
+// ADR-0020 in the management console repo for why it no longer is); the
+// negative control that mattered — a resource kind still gets nothing until a
+// concrete screen needs it — moved to
+// TestManagementWritesAreAllowedOnlyOnHumanWorkerTeamAndProject's ActionDelete
+// assertion, which is the one piece of "project" that still has nothing to
+// grant.
+func TestManagementProjectWritesAreNowAllowedForTheScheduler(t *testing.T) {
+	az := NewAuthorizer()
+	caller := managementCaller()
+
+	for _, a := range []Action{ActionCreate, ActionUpdate, ActionGet, ActionList} {
+		if err := az.Authorize(caller, AuthzRequest{Action: a, ResourceKind: "project", ResourceName: "p-1"}); err != nil {
+			t.Errorf("project %s should be allowed: %v", a, err)
 		}
+	}
+	if err := az.Authorize(caller, AuthzRequest{Action: ActionDelete, ResourceKind: "project", ResourceName: "p-1"}); err == nil {
+		t.Error("project ActionDelete must still be denied — there is no such route")
 	}
 }
 
