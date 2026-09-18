@@ -342,8 +342,8 @@ worker:
     codex:
       repository: higress-registry.cn-hangzhou.cr.aliyuncs.com/agentteams/agentteams-harness-codex
       tag: "v1.2.7"            # shared v1.2.7 Harness release; override supported
-    harness:
-      repository: higress-registry.cn-hangzhou.cr.aliyuncs.com/agentteams/agentteams-harness-worker
+    claudeHarness:
+      repository: higress-registry.cn-hangzhou.cr.aliyuncs.com/agentteams/agentteams-claude-harness
       tag: ""                 # defaults to global.imageTag
   defaultRuntime: "openclaw"
   resources:

@@ -688,13 +688,13 @@ func TestK8sCreateResolvesImageFromRuntime(t *testing.T) {
 		{"explicit_qwenpaw", RuntimeQwenPaw, "", "agentteams/qwenpaw-worker:latest", RuntimeQwenPaw},
 		{"explicit_codex", RuntimeCodex, "", "agentteams/codex-harness:v1", RuntimeCodex},
 		{"explicit_deepseek_harness", RuntimeDeepSeekHarness, "", "agentteams/deepseek-harness-worker:latest", RuntimeDeepSeekHarness},
-		{"explicit_harness", RuntimeHarness, "", "agentteams/harness-worker:latest", RuntimeHarness},
+		{"explicit_claude_harness", RuntimeClaudeHarness, "", "agentteams/claude-harness:latest", RuntimeClaudeHarness},
 		{"explicit_openclaw", RuntimeOpenClaw, "", "agentteams/worker-agent:latest", RuntimeOpenClaw},
 		{"empty_no_fallback", "", "", "agentteams/worker-agent:latest", RuntimeOpenClaw},
 		{"empty_with_copaw_fallback", "", RuntimeCopaw, "agentteams/copaw-worker:latest", RuntimeCopaw},
 		{"empty_with_hermes_fallback", "", RuntimeHermes, "agentteams/hermes-worker:latest", RuntimeHermes},
 		{"empty_with_qwenpaw_fallback", "", RuntimeQwenPaw, "agentteams/qwenpaw-worker:latest", RuntimeQwenPaw},
-		{"empty_with_harness_fallback", "", RuntimeHarness, "agentteams/harness-worker:latest", RuntimeHarness},
+		{"empty_with_claude_harness_fallback", "", RuntimeClaudeHarness, "agentteams/claude-harness:latest", RuntimeClaudeHarness},
 		{"explicit_overrides_fallback", RuntimeOpenClaw, RuntimeHermes, "agentteams/worker-agent:latest", RuntimeOpenClaw},
 	}
 	for _, tc := range cases {
@@ -708,7 +708,7 @@ func TestK8sCreateResolvesImageFromRuntime(t *testing.T) {
 				QwenPawWorkerImage:         "agentteams/qwenpaw-worker:latest",
 				CodexWorkerImage:           "agentteams/codex-harness:v1",
 				DeepSeekHarnessWorkerImage: "agentteams/deepseek-harness-worker:latest",
-				HarnessWorkerImage:         "agentteams/harness-worker:latest",
+				ClaudeHarnessImage:         "agentteams/claude-harness:latest",
 				WorkerCPU:                  "1000m",
 				WorkerMemory:               "2Gi",
 			}, "agentteams-worker-", nil)

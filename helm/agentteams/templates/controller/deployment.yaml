@@ -98,8 +98,8 @@ spec:
             - name: AGENTTEAMS_CODEX_WORKER_IMAGE
               value: {{ include "agentteams.worker.codexImage" . | quote }}
             {{- end }}
-            - name: AGENTTEAMS_HARNESS_WORKER_IMAGE
-              value: {{ include "agentteams.worker.harnessImage" . | quote }}
+            - name: AGENTTEAMS_CLAUDE_HARNESS_IMAGE
+              value: {{ include "agentteams.worker.claudeHarnessImage" . | quote }}
             - name: AGENTTEAMS_DEFAULT_WORKER_RUNTIME
               value: {{ .Values.worker.defaultRuntime | quote }}
             - name: TZ
