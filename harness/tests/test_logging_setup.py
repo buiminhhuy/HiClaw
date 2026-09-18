@@ -10,7 +10,7 @@ import logging
 
 import pytest
 
-from harness_worker import logging_setup
+from claude_harness import logging_setup
 
 
 @pytest.fixture(autouse=True)

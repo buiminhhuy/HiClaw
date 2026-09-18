@@ -1,4 +1,4 @@
-"""Harness Worker main entry point."""
+"""Claude Harness worker main entry point."""
 from __future__ import annotations
 
 import asyncio
@@ -15,12 +15,12 @@ from typing import Any, Dict, Optional
 from rich.console import Console
 from rich.panel import Panel
 
-from harness_worker.bridge import bridge_openclaw_to_harness, _is_in_container, _port_remap
-from harness_worker.claude import ClaudeHarness
-from harness_worker.config import WorkerConfig
-from harness_worker.matrix_relay import MatrixRelay
-from harness_worker.sync import FileSync, push_loop, sync_loop
-from harness_worker.telemetry import (
+from claude_harness.bridge import bridge_openclaw_to_harness, _is_in_container, _port_remap
+from claude_harness.claude import ClaudeHarness
+from claude_harness.config import WorkerConfig
+from claude_harness.matrix_relay import MatrixRelay
+from claude_harness.sync import FileSync, push_loop, sync_loop
+from claude_harness.telemetry import (
     TURN_END,
     TURN_START,
     TurnContext,
@@ -37,7 +37,7 @@ console = Console()
 # access token, the object-storage access/secret keys and the gateway consumer
 # key, so it must never be forwarded wholesale. Only these names, the CLI-owned
 # prefixes below, and whatever the operator opts into via
-# AGENTTEAMS_HARNESS_ENV_PASSTHROUGH cross the boundary.
+# AGENTTEAMS_CLAUDE_HARNESS_ENV_PASSTHROUGH cross the boundary.
 _SUBPROCESS_ENV_ALLOWLIST = frozenset({
     "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "TERM_PROGRAM",
     "PWD", "TMPDIR", "TZ",
@@ -58,7 +58,7 @@ def _subprocess_env(harness_env: Dict[str, str]) -> Dict[str, str]:
     """Build the CLI subprocess environment from an allowlist of os.environ."""
     extra = {
         name.strip()
-        for name in os.environ.get("AGENTTEAMS_HARNESS_ENV_PASSTHROUGH", "").split(",")
+        for name in os.environ.get("AGENTTEAMS_CLAUDE_HARNESS_ENV_PASSTHROUGH", "").split(",")
         if name.strip()
     }
     env = {
@@ -103,19 +103,19 @@ class Worker:
         if self._stopping:
             return
         self._stopping = True
-        console.print("[yellow]Stopping harness worker...[/yellow]")
+        console.print("[yellow]Stopping claude-harness worker...[/yellow]")
         if self._relay_task and not self._relay_task.done():
             self._relay_task.cancel()
             try:
                 await self._relay_task
             except (asyncio.CancelledError, Exception):
                 pass
-        console.print("[green]Harness worker stopped.[/green]")
+        console.print("[green]Claude harness worker stopped.[/green]")
 
     async def start(self) -> bool:
         console.print(
             Panel.fit(
-                f"[bold green]Harness Worker[/bold green]\n"
+                f"[bold green]Claude Harness Worker[/bold green]\n"
                 f"Worker: [cyan]{self.worker_name}[/cyan]\n"
                 f"Agent: [cyan]Claude Code[/cyan]\n"
                 f"HARNESS_HOME: [cyan]{self._harness_home}[/cyan]",
@@ -180,7 +180,7 @@ class Worker:
 
         self._mark_ready()
 
-        console.print("[bold green]Harness worker initialized.[/bold green]")
+        console.print("[bold green]Claude harness worker initialized.[/bold green]")
         return True
 
     def _mark_ready(self) -> None:
@@ -197,7 +197,7 @@ class Worker:
             logger.warning("failed to write readiness marker: %s", exc)
 
     async def _run_matrix_relay(self) -> None:
-        from harness_worker.policies import DualAllowList, HistoryBuffer
+        from claude_harness.policies import DualAllowList, HistoryBuffer
 
         openclaw_cfg = self.sync.get_config() if self.sync else {}
         matrix_cfg = openclaw_cfg.get("channels", {}).get("matrix", {})
@@ -264,7 +264,7 @@ class Worker:
             "invoke_harness: room=%s session=%s msg=%s", room_id, session_id, message[:100]
         )
 
-        timeout_seconds = int(os.environ.get("AGENTTEAMS_HARNESS_TIMEOUT_MS", "600000")) / 1000.0
+        timeout_seconds = int(os.environ.get("AGENTTEAMS_CLAUDE_HARNESS_TIMEOUT_MS", "600000")) / 1000.0
 
         harness_env = self._harness.env(self.sync.get_config() if self.sync else {})
         merged_env = _subprocess_env(harness_env)
@@ -488,7 +488,7 @@ class Worker:
                 console.print(f"[red]Skills refresh failed: {exc}[/red]")
 
     def _matrix_relogin(self, openclaw_cfg: Dict[str, Any]) -> Dict[str, Any]:
-        from harness_worker.matrix import matrix_relogin
+        from claude_harness.matrix import matrix_relogin
 
         if self.sync is None:
             return openclaw_cfg

@@ -1,4 +1,4 @@
-"""WorkerConfig for harness-worker."""
+"""WorkerConfig for claude-harness."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,4 +34,4 @@ class WorkerConfig:
     @property
     def harness_home(self) -> Path:
         """Harness config home (~/.claude, ~/.gemini, etc.)."""
-        return self.workspace_dir / ".harness"
+        return self.workspace_dir / ".claude-harness"

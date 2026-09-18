@@ -1,14 +1,14 @@
-"""CLI entry point: ``harness-remote`` (local-environment harness worker).
+"""CLI entry point: ``claude-harness-remote`` (local-environment harness worker).
 
 Two modes:
 
-  harness-remote [run-options]   # run the remote worker (default, no subcommand)
-  harness-remote attach          # attach an interactive `claude` session to one of
+  claude-harness-remote [run-options]   # run the remote worker (default, no subcommand)
+  claude-harness-remote attach          # attach an interactive `claude` session to one of
                                  # the worker's rooms (REPL slash commands)
 
 Config is **env-backed**: every option binds to its ``AGENTTEAMS_*`` env var so the
 documented environment contract works without a container entrypoint. Flags
-override env. Unlike the in-cluster ``harness-worker``, the default install dir
+override env. Unlike the in-cluster ``claude-harness``, the default install dir
 is local (``~/.agentteams/agents``).
 """
 from __future__ import annotations
@@ -23,10 +23,10 @@ from typing import Optional
 
 import typer
 
-from harness_worker.config import WorkerConfig
-from harness_worker.logging_setup import configure_logging
-from harness_worker.remote_worker import RemoteWorker
-from harness_worker.worker import Worker
+from claude_harness.config import WorkerConfig
+from claude_harness.logging_setup import configure_logging
+from claude_harness.remote_worker import RemoteWorker
+from claude_harness.worker import Worker
 
 # Local machine → defaults to human-readable text; override with
 # AGENTTEAMS_LOG_FORMAT=json when shipping a local worker's logs somewhere.
@@ -147,10 +147,10 @@ def attach(
     if not workspace.is_dir():
         raise typer.BadParameter(f"workspace not found: {workspace} (run the worker first)")
 
-    # Source .harness/.env so any local secrets are available to the session.
-    Worker._load_env_file(workspace / ".harness" / ".env")
+    # Source .claude-harness/.env so any local secrets are available to the session.
+    Worker._load_env_file(workspace / ".claude-harness" / ".env")
 
-    sessions = _load_session_map(workspace / ".harness" / "sessions" / "rooms.json")
+    sessions = _load_session_map(workspace / ".claude-harness" / "sessions" / "rooms.json")
     session_id = None
     if room:
         session_id = sessions.get(room)

@@ -1,4 +1,4 @@
-"""CLI entry point: ``harness-worker``."""
+"""CLI entry point: ``claude-harness``."""
 from __future__ import annotations
 
 import asyncio
@@ -9,9 +9,9 @@ from typing import Optional
 
 import typer
 
-from harness_worker.config import WorkerConfig
-from harness_worker.logging_setup import configure_logging
-from harness_worker.worker import Worker
+from claude_harness.config import WorkerConfig
+from claude_harness.logging_setup import configure_logging
+from claude_harness.worker import Worker
 
 configure_logging(logging.INFO)
 

@@ -14,7 +14,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
 
-from harness_worker.claude import ClaudeHarness
+from claude_harness.claude import ClaudeHarness
 
 logger = logging.getLogger(__name__)
 _MISSING: Any = object()
@@ -38,7 +38,7 @@ def _is_in_container() -> bool:
 
 
 def _template_text(name: str) -> str:
-    return (resources.files("harness_worker") / "templates" / name).read_text(encoding="utf-8")
+    return (resources.files("claude_harness") / "templates" / name).read_text(encoding="utf-8")
 
 
 def _install_from_template(dst: Path, template_name: str) -> bool:
@@ -59,7 +59,7 @@ def bridge_openclaw_to_harness(
 
     ClaudeHarness().bridge_config(openclaw_cfg, harness_home)
 
-    os.environ["AGENTTEAMS_HARNESS_HOME"] = str(harness_home)
+    os.environ["AGENTTEAMS_CLAUDE_HARNESS_HOME"] = str(harness_home)
 
 
 def _get_path(container: dict[str, Any], path: tuple[str, ...]) -> Any:
@@ -179,5 +179,5 @@ def _resolve_matrix_user_id(cfg: dict[str, Any], _in_container: bool = False) ->
     domain = os.environ.get("AGENTTEAMS_MATRIX_DOMAIN") or os.environ.get("MATRIX_DOMAIN", "")
     if not domain:
         return _MISSING
-    local = os.environ.get("AGENTTEAMS_WORKER_NAME", "harness-worker")
+    local = os.environ.get("AGENTTEAMS_WORKER_NAME", "claude-harness")
     return f"@{local}:{domain}"
