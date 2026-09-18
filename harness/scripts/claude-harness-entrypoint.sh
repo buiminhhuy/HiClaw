@@ -1,6 +1,6 @@
 #!/bin/bash
-# harness-worker-entrypoint.sh - Harness Worker container startup
-# Reads config from environment variables and launches harness-worker.
+# claude-harness-entrypoint.sh - Claude Harness worker container startup
+# Reads config from environment variables and launches claude-harness.
 #
 # Environment variables (set by controller during worker creation):
 #   AGENTTEAMS_WORKER_NAME   - Worker name (required)
@@ -14,19 +14,19 @@ set -e
 
 # Source shared environment bootstrap (provides ensure_mc_credentials in cloud
 # mode, plus AGENTTEAMS_STORAGE_ALIAS / AGENTTEAMS_STORAGE_PREFIX used by
-# harness_worker.sync).
+# claude_harness.sync).
 source /opt/agentteams/scripts/lib/agentteams-env.sh 2>/dev/null || true
 
 WORKER_NAME="${AGENTTEAMS_WORKER_NAME:?AGENTTEAMS_WORKER_NAME is required}"
 # Align with the openclaw worker layout: HOME == workspace == MinIO mirror root.
 # The controller injects HOME=/root/agentteams-fs/agents/<WORKER_NAME>; we anchor
-# the install dir to its parent so workspace_dir == HOME and the harness home is
-# ${HOME}/.harness/.
+# the install dir to its parent so workspace_dir == HOME and the claude-harness home is
+# ${HOME}/.claude-harness/.
 INSTALL_DIR="${AGENTTEAMS_INSTALL_DIR:-/root/agentteams-fs/agents}"
 WORKSPACE="${INSTALL_DIR}/${WORKER_NAME}"
 
 log() {
-    echo "[agentteams-harness-worker $(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "[agentteams-claude-harness $(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
 # Set timezone from TZ env var
@@ -55,20 +55,20 @@ else
 fi
 log "  FS bucket: ${FS_BUCKET}"
 
-# Workspace == HOME, so ~/skills is the real directory harness_worker syncs from
+# Workspace == HOME, so ~/skills is the real directory claude_harness syncs from
 # MinIO. Mirror the openclaw convention of also exposing it as ~/.agents/skills
 # for any tool that walks that legacy path.
 mkdir -p "${WORKSPACE}/skills" "${HOME}/.agents"
 ln -sfn "${WORKSPACE}/skills" "${HOME}/.agents/skills"
 
-# Background readiness reporter — report ready once harness_worker has finished
+# Background readiness reporter — report ready once claude_harness has finished
 # bootstrapping (mirror + bridge) and dropped its readiness marker.
 _start_readiness_reporter() {
     [ -z "${AGENTTEAMS_CONTROLLER_URL:-}" ] && return 0
 
     (
         TIMEOUT=120; ELAPSED=0
-        READY_FILE="${WORKSPACE}/.harness/ready"
+        READY_FILE="${WORKSPACE}/.claude-harness/ready"
         while [ "${ELAPSED}" -lt "${TIMEOUT}" ]; do
             if [ -f "${READY_FILE}" ]; then
                 break
@@ -86,13 +86,13 @@ _start_readiness_reporter() {
     log "Background readiness reporter started (PID: $!)"
 }
 
-log "Starting harness-worker: ${WORKER_NAME}"
+log "Starting claude-harness: ${WORKER_NAME}"
 log "  FS endpoint: ${FS_ENDPOINT}"
 log "  Install dir: ${INSTALL_DIR}"
 
 # A stale marker from a previous container would make the reporter fire before
 # this process has actually bridged its config.
-rm -f "${WORKSPACE}/.harness/ready"
+rm -f "${WORKSPACE}/.claude-harness/ready"
 
 CMD_ARGS=(
     --name "${WORKER_NAME}"
@@ -105,4 +105,4 @@ CMD_ARGS=(
 
 _start_readiness_reporter
 
-exec harness-worker "${CMD_ARGS[@]}"
+exec claude-harness "${CMD_ARGS[@]}"

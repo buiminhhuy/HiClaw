@@ -10,9 +10,9 @@ import logging
 
 import pytest
 
-from harness_worker import telemetry as tm
-from harness_worker.claude import ClaudeHarness
-from harness_worker.logging_setup import JSONFormatter
+from claude_harness import telemetry as tm
+from claude_harness.claude import ClaudeHarness
+from claude_harness.logging_setup import JSONFormatter
 
 
 @pytest.fixture
@@ -198,7 +198,7 @@ def test_dropped_events_surface_as_observation_gap(monkeypatch, caplog):
             return 3
 
     em._sink = _FullSink()
-    with caplog.at_level(logging.WARNING, logger="harness_worker.telemetry"):
+    with caplog.at_level(logging.WARNING, logger="claude_harness.telemetry"):
         em.emit(tm.TOOL_CALL, tm.TurnContext(turn_id="t", worker="w"), message="x")
 
     gaps = [r for r in caplog.records if getattr(r, "telemetry", {}).get("event") == tm.OBSERVATION_GAP]
@@ -213,12 +213,12 @@ def test_disabled_emitter_is_a_noop(caplog):
     em._resource = {}
 
     em._enabled = True
-    with caplog.at_level(logging.DEBUG, logger="harness_worker.telemetry"):
+    with caplog.at_level(logging.DEBUG, logger="claude_harness.telemetry"):
         em.emit(tm.TOOL_CALL, None, message="marker")
     assert [r for r in caplog.records if "marker" in r.getMessage()], "guard: enabled must emit"
 
     caplog.clear()
     em._enabled = False
-    with caplog.at_level(logging.DEBUG, logger="harness_worker.telemetry"):
+    with caplog.at_level(logging.DEBUG, logger="claude_harness.telemetry"):
         em.emit(tm.TOOL_CALL, None, message="marker")
     assert not [r for r in caplog.records if "marker" in r.getMessage()]

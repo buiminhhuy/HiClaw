@@ -207,7 +207,7 @@ class Emitter:
     def configure(self, *, worker_name: str = "") -> None:
         self._enabled = os.environ.get("AGENTTEAMS_TELEMETRY_ENABLED", "1") != "0"
         self._resource = {
-            "service.name": "agentteams-harness-worker",
+            "service.name": "agentteams-claude-harness",
             "agentteams.worker": worker_name or os.environ.get("AGENTTEAMS_WORKER_NAME", ""),
         }
         pod = os.environ.get("HOSTNAME", "")
@@ -265,7 +265,7 @@ class Emitter:
         # In text mode this drops to DEBUG: the existing claude.py log lines
         # already narrate the same moments, and echoing each one twice makes a
         # developer's terminal unreadable for no gain.
-        from harness_worker import logging_setup
+        from claude_harness import logging_setup
 
         level = logging.INFO if logging_setup.ACTIVE_FORMAT == "json" else logging.DEBUG
         logger.log(level, message or event, extra={"telemetry": envelope})

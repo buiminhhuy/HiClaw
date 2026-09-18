@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentteams-harness-worker"
-version = "0.2.0"
-description = "AgentTeams harness worker — delegates the agent loop to Claude Code, Gemini CLI, OpenCode, or Codex. Includes the harness-remote developer CLI."
+name = "agentteams-claude-harness"
+version = "0.3.0"
+description = "AgentTeams claude-harness worker — delegates the agent loop to Claude Code. Includes the claude-harness-remote developer CLI."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-keywords = ["agentteams", "agent", "claude-code", "gemini", "ai", "developer-tools"]
+keywords = ["agentteams", "agent", "claude-code", "ai", "developer-tools"]
 authors = [
     { name = "AgentTeams Contributors" },
 ]
@@ -27,14 +27,14 @@ dependencies = [
     "typer>=0.12",
     "rich>=13.0",
     "httpx>=0.27",
-    # Matrix relay (harness_worker.matrix) + HTML formatting of replies.
+    # Matrix relay (claude_harness.matrix) + HTML formatting of replies.
     "mautrix[encryption]>=0.20",
     "markdown-it-py>=3.0",
 ]
 
 [project.scripts]
-harness-worker = "harness_worker.cli:main"
-harness-remote = "harness_worker.remote_cli:main"
+claude-harness = "claude_harness.cli:main"
+claude-harness-remote = "claude_harness.remote_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/agentscope-ai/AgentTeams"
@@ -45,4 +45,4 @@ Documentation = "https://github.com/agentscope-ai/AgentTeams/blob/main/harness/R
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/harness_worker"]
+packages = ["src/claude_harness"]

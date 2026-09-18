@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from harness_worker.config import WorkerConfig
-from harness_worker.worker import Worker, _subprocess_env
+from claude_harness.config import WorkerConfig
+from claude_harness.worker import Worker, _subprocess_env
 
 
 def _worker(tmp_path: Path) -> Worker:
@@ -34,7 +34,7 @@ def test_worker_secrets_are_not_forwarded_to_the_cli(monkeypatch) -> None:
         "MATRIX_ALLOWED_USERS",
     ):
         monkeypatch.setenv(name, "secret")
-    monkeypatch.delenv("AGENTTEAMS_HARNESS_ENV_PASSTHROUGH", raising=False)
+    monkeypatch.delenv("AGENTTEAMS_CLAUDE_HARNESS_ENV_PASSTHROUGH", raising=False)
 
     env = _subprocess_env({})
 
@@ -48,7 +48,7 @@ def test_allowlisted_and_cli_owned_names_are_forwarded(monkeypatch) -> None:
     monkeypatch.setenv("HOME", "/root")
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://gw")
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", "/cfg")
-    monkeypatch.delenv("AGENTTEAMS_HARNESS_ENV_PASSTHROUGH", raising=False)
+    monkeypatch.delenv("AGENTTEAMS_CLAUDE_HARNESS_ENV_PASSTHROUGH", raising=False)
 
     env = _subprocess_env({})
 
@@ -60,7 +60,7 @@ def test_allowlisted_and_cli_owned_names_are_forwarded(monkeypatch) -> None:
 
 def test_harness_env_overrides_inherited_values(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://stale")
-    monkeypatch.delenv("AGENTTEAMS_HARNESS_ENV_PASSTHROUGH", raising=False)
+    monkeypatch.delenv("AGENTTEAMS_CLAUDE_HARNESS_ENV_PASSTHROUGH", raising=False)
 
     env = _subprocess_env({"ANTHROPIC_BASE_URL": "http://fresh"})
 
@@ -70,7 +70,7 @@ def test_harness_env_overrides_inherited_values(monkeypatch) -> None:
 def test_operator_can_opt_extra_names_in(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
     monkeypatch.setenv("UNRELATED", "nope")
-    monkeypatch.setenv("AGENTTEAMS_HARNESS_ENV_PASSTHROUGH", "GITHUB_TOKEN, OTHER")
+    monkeypatch.setenv("AGENTTEAMS_CLAUDE_HARNESS_ENV_PASSTHROUGH", "GITHUB_TOKEN, OTHER")
 
     env = _subprocess_env({})
 

@@ -1,4 +1,4 @@
-"""Logging setup shared by ``harness-worker`` and ``harness-remote``.
+"""Logging setup shared by ``claude-harness`` and ``claude-harness-remote``.
 
 Two formats, one call site:
 

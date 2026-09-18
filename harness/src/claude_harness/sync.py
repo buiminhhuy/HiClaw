@@ -1,4 +1,4 @@
-"""MinIO file sync for harness-worker.
+"""MinIO file sync for claude-harness.
 
 Vendored from ``hermes/src/hermes_worker/sync.py`` and generalized with the
 ``runtime_home_dir`` constructor parameter so the runtime-home directory is not
@@ -23,7 +23,7 @@ File Sync Design Principle (mirrors copaw-worker):
   Remote -> Local (sync_loop pull_all): on-demand via file-sync skill when
     Manager @mentions, plus fallback periodic pull of Manager-managed paths.
 
-  The whole runtime-home dir (``<runtime_home_dir>/``, default ``.harness``) is
+  The whole runtime-home dir (``<runtime_home_dir>/``, default ``.claude-harness``) is
   excluded from the standard push. ``RemoteWorker`` layers a scoped push of a
   curated subset on top for developer environments.
 """
@@ -165,7 +165,7 @@ class FileSync:
         worker_name: str,
         secure: bool = False,
         local_dir: Optional[Path] = None,
-        runtime_home_dir: str = ".harness",
+        runtime_home_dir: str = ".claude-harness",
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.access_key = access_key
@@ -184,7 +184,7 @@ class FileSync:
         self._prefix = f"agents/{worker_name}"
         self._alias_set = False
         self._cloud_mode = os.environ.get("AGENTTEAMS_RUNTIME") == "aliyun"
-        # Runtime-home dir for this runtime (".harness" for harness-worker,
+        # Runtime-home dir for this runtime (".claude-harness" for claude-harness,
         # ".hermes" for hermes-worker). Excluded from the standard push.
         self._runtime_home_dir = runtime_home_dir
         self._exclude_dirs = {

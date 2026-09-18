@@ -38,7 +38,7 @@ from mautrix.types import (
 )
 from mautrix.types.event.message import MessageEvent
 
-from harness_worker.policies import (
+from claude_harness.policies import (
     DualAllowList,
     HistoryBuffer,
     apply_outbound_mentions,
