@@ -201,19 +201,53 @@ func TestBackendConfigsDefaultToIndependentDeepSeekHarnessVersion(t *testing.T) 
 	}
 }
 
-func TestBackendConfigsIncludeHarnessWorkerImage(t *testing.T) {
-	t.Setenv("AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/harness-worker:test")
+func TestBackendConfigsIncludeClaudeHarnessImage(t *testing.T) {
+	t.Setenv("AGENTTEAMS_CLAUDE_HARNESS_IMAGE", "agentteams/claude-harness:test")
 
 	cfg := LoadConfig()
 
 	for name, got := range map[string]string{
-		"docker":  cfg.DockerConfig().HarnessWorkerImage,
-		"k8s":     cfg.K8sConfig().HarnessWorkerImage,
-		"sandbox": cfg.SandboxConfig().HarnessWorkerImage,
+		"docker":  cfg.DockerConfig().ClaudeHarnessImage,
+		"k8s":     cfg.K8sConfig().ClaudeHarnessImage,
+		"sandbox": cfg.SandboxConfig().ClaudeHarnessImage,
 	} {
-		if want := "agentteams/harness-worker:test"; got != want {
-			t.Fatalf("%s HarnessWorkerImage = %q, want %q", name, got, want)
+		if want := "agentteams/claude-harness:test"; got != want {
+			t.Fatalf("%s ClaudeHarnessImage = %q, want %q", name, got, want)
 		}
+	}
+}
+
+// TestClaudeHarnessImageFallsBackToTheDeprecatedEnvVar pins the one-deploy-
+// window dual-read added alongside the harness -> claude-harness rename: a
+// chart still setting the old AGENTTEAMS_HARNESS_WORKER_IMAGE name (wrapper
+// repo not yet redeployed) must not silently fall through to the upstream
+// DockerHub default, which the dev registry can't serve.
+func TestClaudeHarnessImageFallsBackToTheDeprecatedEnvVar(t *testing.T) {
+	t.Setenv("AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/harness-worker:legacy")
+
+	cfg := LoadConfig()
+
+	for name, got := range map[string]string{
+		"docker":  cfg.DockerConfig().ClaudeHarnessImage,
+		"k8s":     cfg.K8sConfig().ClaudeHarnessImage,
+		"sandbox": cfg.SandboxConfig().ClaudeHarnessImage,
+	} {
+		if want := "agentteams/harness-worker:legacy"; got != want {
+			t.Fatalf("%s ClaudeHarnessImage = %q, want %q (deprecated fallback)", name, got, want)
+		}
+	}
+}
+
+// TestClaudeHarnessImagePrefersTheNewEnvVarOverTheDeprecatedOne guards the
+// read order itself, not just each env var in isolation.
+func TestClaudeHarnessImagePrefersTheNewEnvVarOverTheDeprecatedOne(t *testing.T) {
+	t.Setenv("AGENTTEAMS_CLAUDE_HARNESS_IMAGE", "agentteams/claude-harness:new")
+	t.Setenv("AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/harness-worker:legacy")
+
+	cfg := LoadConfig()
+
+	if got, want := cfg.K8sConfig().ClaudeHarnessImage, "agentteams/claude-harness:new"; got != want {
+		t.Fatalf("ClaudeHarnessImage = %q, want %q (new env var must win)", got, want)
 	}
 }
 

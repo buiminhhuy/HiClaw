@@ -33,7 +33,7 @@ type K8sConfig struct {
 	OpenHumanWorkerImage       string
 	QwenPawWorkerImage         string
 	DeepSeekHarnessWorkerImage string
-	HarnessWorkerImage         string
+	ClaudeHarnessImage         string
 	WorkerCPU                  string
 	WorkerMemory               string
 
@@ -268,8 +268,8 @@ func (k *K8sBackend) Create(ctx context.Context, req CreateRequest) (*WorkerResu
 			image = k.config.QwenPawWorkerImage
 		case req.Runtime == RuntimeDeepSeekHarness && k.config.DeepSeekHarnessWorkerImage != "":
 			image = k.config.DeepSeekHarnessWorkerImage
-		case req.Runtime == RuntimeHarness && k.config.HarnessWorkerImage != "":
-			image = k.config.HarnessWorkerImage
+		case req.Runtime == RuntimeClaudeHarness && k.config.ClaudeHarnessImage != "":
+			image = k.config.ClaudeHarnessImage
 		case k.config.WorkerImage != "":
 			image = k.config.WorkerImage
 		}
@@ -754,8 +754,8 @@ func defaultRuntime(runtime string) string {
 		return RuntimeQwenPaw
 	case RuntimeDeepSeekHarness:
 		return RuntimeDeepSeekHarness
-	case RuntimeHarness:
-		return RuntimeHarness
+	case RuntimeClaudeHarness:
+		return RuntimeClaudeHarness
 	default:
 		return RuntimeOpenClaw
 	}

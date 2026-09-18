@@ -198,7 +198,7 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "%s:%s" .Values.worker.defaultImage.deepseekHarness.repository $tag }}
 {{- end }}
 
-{{- define "agentteams.worker.harnessImage" -}}
-{{- $tag := default (include "agentteams.globalImageTag" .) .Values.worker.defaultImage.harness.tag }}
-{{- printf "%s:%s" .Values.worker.defaultImage.harness.repository $tag }}
+{{- define "agentteams.worker.claudeHarnessImage" -}}
+{{- $tag := default (include "agentteams.globalImageTag" .) .Values.worker.defaultImage.claudeHarness.tag }}
+{{- printf "%s:%s" .Values.worker.defaultImage.claudeHarness.repository $tag }}
 {{- end }}

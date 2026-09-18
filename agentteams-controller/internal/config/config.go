@@ -530,7 +530,7 @@ func (c *Config) DockerConfig() backend.DockerConfig {
 		OpenHumanWorkerImage:       envOrDefault("AGENTTEAMS_OPENHUMAN_WORKER_IMAGE", "agentteams/agentteams-openhuman-worker:latest"),
 		QwenPawWorkerImage:         envOrDefault("AGENTTEAMS_QWENPAW_WORKER_IMAGE", "agentteams/agentteams-qwenpaw-worker:latest"),
 		DeepSeekHarnessWorkerImage: envOrDefault("AGENTTEAMS_DEEPSEEK_HARNESS_WORKER_IMAGE", "agentteams/agentteams-deepseek-harness-worker:v0.1.0"),
-		HarnessWorkerImage:         envOrDefault("AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/agentteams-harness-worker:latest"),
+		ClaudeHarnessImage:         envOrDeprecatedOrDefault("AGENTTEAMS_CLAUDE_HARNESS_IMAGE", "AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/agentteams-claude-harness:latest"),
 		DefaultNetwork:             envOrDefault("AGENTTEAMS_DOCKER_NETWORK", "agentteams-net"),
 	}
 }
@@ -575,7 +575,7 @@ func (c *Config) K8sConfig() backend.K8sConfig {
 		OpenHumanWorkerImage:       envOrDefault("AGENTTEAMS_OPENHUMAN_WORKER_IMAGE", "agentteams/agentteams-openhuman-worker:latest"),
 		QwenPawWorkerImage:         envOrDefault("AGENTTEAMS_QWENPAW_WORKER_IMAGE", "agentteams/agentteams-qwenpaw-worker:latest"),
 		DeepSeekHarnessWorkerImage: envOrDefault("AGENTTEAMS_DEEPSEEK_HARNESS_WORKER_IMAGE", "agentteams/agentteams-deepseek-harness-worker:v0.1.0"),
-		HarnessWorkerImage:         envOrDefault("AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/agentteams-harness-worker:latest"),
+		ClaudeHarnessImage:         envOrDeprecatedOrDefault("AGENTTEAMS_CLAUDE_HARNESS_IMAGE", "AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/agentteams-claude-harness:latest"),
 		WorkerCPU:                  c.K8sWorkerCPU,
 		WorkerMemory:               c.K8sWorkerMemory,
 		ControllerName:             c.ControllerName,
@@ -594,7 +594,7 @@ func (c *Config) SandboxConfig() backend.SandboxConfig {
 		OpenHumanWorkerImage:         envOrDefault("AGENTTEAMS_OPENHUMAN_WORKER_IMAGE", "agentteams/agentteams-openhuman-worker:latest"),
 		QwenPawWorkerImage:           envOrDefault("AGENTTEAMS_QWENPAW_WORKER_IMAGE", "agentteams/agentteams-qwenpaw-worker:latest"),
 		DeepSeekHarnessWorkerImage:   envOrDefault("AGENTTEAMS_DEEPSEEK_HARNESS_WORKER_IMAGE", "agentteams/agentteams-deepseek-harness-worker:v0.1.0"),
-		HarnessWorkerImage:           envOrDefault("AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/agentteams-harness-worker:latest"),
+		ClaudeHarnessImage:           envOrDeprecatedOrDefault("AGENTTEAMS_CLAUDE_HARNESS_IMAGE", "AGENTTEAMS_HARNESS_WORKER_IMAGE", "agentteams/agentteams-claude-harness:latest"),
 		WorkerCPU:                    c.K8sWorkerCPU,
 		WorkerMemory:                 c.K8sWorkerMemory,
 		SandboxPrewarmSize:           c.SandboxPrewarmSize,
@@ -606,6 +606,22 @@ func (c *Config) SandboxConfig() backend.SandboxConfig {
 
 func envOrDefault(key, defaultVal string) string {
 	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
+// envOrDeprecatedOrDefault reads key, falling back to deprecatedKey (an
+// older env var name kept for one deploy window during a rename), then to
+// defaultVal. A mismatch between the two repos crossing this env var boundary
+// wouldn't error — it would silently fall back to defaultVal, an upstream
+// image the dev registry can't serve. Remove once the rename's contract-only
+// deploy window closes (see ADR for the harness -> claude-harness rename).
+func envOrDeprecatedOrDefault(key, deprecatedKey, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	if v := os.Getenv(deprecatedKey); v != "" {
 		return v
 	}
 	return defaultVal

@@ -37,7 +37,7 @@ const (
 	RuntimeOpenHuman       = "openhuman"
 	RuntimeQwenPaw         = "qwenpaw"
 	RuntimeDeepSeekHarness = "deepseek-harness"
-	RuntimeHarness         = "harness"
+	RuntimeClaudeHarness   = "claude-harness"
 )
 
 const (
@@ -63,7 +63,7 @@ func NormalizeAuthTokenExpirationSeconds(seconds int64) int64 {
 // An empty string is valid — backends resolve it via ResolveRuntime.
 func ValidRuntime(r string) bool {
 	return r == "" || r == RuntimeOpenClaw || r == RuntimeCopaw || r == RuntimeHermes || r == RuntimeOpenHuman || r == RuntimeQwenPaw ||
-		r == RuntimeDeepSeekHarness || r == RuntimeHarness
+		r == RuntimeDeepSeekHarness || r == RuntimeClaudeHarness
 }
 
 // UsesMemberRuntimeConfig reports whether a runtime consumes the
