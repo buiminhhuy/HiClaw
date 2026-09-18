@@ -37,7 +37,7 @@ ARG NPM_REGISTRY=https://registry.npmjs.org/
 # Pinned so image builds are reproducible and the JSON / JSONL stream format
 # claude_harness/claude.py depends on cannot change under us. Bump
 # deliberately, then re-run the parser tests.
-ARG CLAUDE_CODE_VERSION=2.1.235
+ARG CLAUDE_CODE_VERSION=2.1.276
 ARG MCPORTER_VERSION=0.13.7
 
 RUN if [ -n "${APT_MIRROR}" ]; then \
