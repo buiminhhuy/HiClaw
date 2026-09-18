@@ -1,13 +1,13 @@
-"""Unit tests for the remote worker's scoped .harness/ setup push."""
+"""Unit tests for the remote worker's scoped .claude-harness/ setup push."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from harness_worker.config import WorkerConfig
-from harness_worker import remote_worker
-from harness_worker.remote_worker import RemoteWorker
+from claude_harness.config import WorkerConfig
+from claude_harness import remote_worker
+from claude_harness.remote_worker import RemoteWorker
 
 
 class FakeSync:
@@ -47,7 +47,7 @@ def _make_worker(tmp_path: Path, *, harnessignore: str | None = None) -> tuple[R
     (home / "sessions").mkdir(exist_ok=True)
     (home / "sessions" / "rooms.json").write_text('{"!room:localhost": "sess-123"}')
     if harnessignore is not None:
-        (home / ".harnessignore").write_text(harnessignore)
+        (home / ".claude-harnessignore").write_text(harnessignore)
 
     # Capture mc cp invocations instead of touching MinIO.
     cp_calls: list[list[str]] = []
@@ -71,22 +71,22 @@ def _pushed_rel(worker: RemoteWorker) -> set[str]:
 def test_pushes_setup_files_but_never_env(tmp_path: Path) -> None:
     worker, _ = _make_worker(tmp_path)
     pushed = _pushed_rel(worker)
-    assert ".harness/mcp-local.json" in pushed
-    assert ".harness/claude.settings.json" in pushed
-    assert ".harness/claudeignore" in pushed
-    assert ".harness/sessions/rooms.json" in pushed
+    assert ".claude-harness/mcp-local.json" in pushed
+    assert ".claude-harness/claude.settings.json" in pushed
+    assert ".claude-harness/claudeignore" in pushed
+    assert ".claude-harness/sessions/rooms.json" in pushed
     # Secrets are never pushed.
-    assert ".harness/.env" not in pushed
+    assert ".claude-harness/.env" not in pushed
     assert not any(p.endswith(".env") for p in pushed)
 
 
 def test_skips_when_remote_identical(tmp_path: Path) -> None:
     worker, _ = _make_worker(tmp_path)
     # Pretend MinIO already holds an identical mcp-local.json.
-    worker.sync._remote["agents/w/.harness/mcp-local.json"] = '{"mcpServers": {}}'
+    worker.sync._remote["agents/w/.claude-harness/mcp-local.json"] = '{"mcpServers": {}}'
     pushed = _pushed_rel(worker)
-    assert ".harness/mcp-local.json" not in pushed  # unchanged → skipped
-    assert ".harness/claude.settings.json" in pushed  # still changed
+    assert ".claude-harness/mcp-local.json" not in pushed  # unchanged → skipped
+    assert ".claude-harness/claude.settings.json" in pushed  # still changed
 
 
 def test_harnessignore_opts_out_files(tmp_path: Path) -> None:
@@ -95,15 +95,15 @@ def test_harnessignore_opts_out_files(tmp_path: Path) -> None:
         harnessignore="# local-only\nmcp-local.json\nsessions/\n",
     )
     pushed = _pushed_rel(worker)
-    assert ".harness/mcp-local.json" not in pushed     # file pattern
-    assert ".harness/sessions/rooms.json" not in pushed   # dir pattern
-    assert ".harness/claude.settings.json" in pushed   # not ignored
+    assert ".claude-harness/mcp-local.json" not in pushed     # file pattern
+    assert ".claude-harness/sessions/rooms.json" not in pushed   # dir pattern
+    assert ".claude-harness/claude.settings.json" in pushed   # not ignored
 
 
 def test_harnessignore_itself_never_pushed(tmp_path: Path) -> None:
     worker, _ = _make_worker(tmp_path, harnessignore="nothing\n")
     pushed = _pushed_rel(worker)
-    assert ".harness/.harnessignore" not in pushed
+    assert ".claude-harness/.claude-harnessignore" not in pushed
 
 
 @pytest.mark.parametrize(

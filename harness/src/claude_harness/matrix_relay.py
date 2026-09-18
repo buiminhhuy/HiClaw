@@ -1,17 +1,17 @@
-"""Matrix relay for harness-worker — thin adapter over harness_worker.matrix."""
+"""Matrix relay for claude-harness — thin adapter over claude_harness.matrix."""
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
-from harness_worker.matrix import MautrixRelay
-from harness_worker.policies import DualAllowList, HistoryBuffer
+from claude_harness.matrix import MautrixRelay
+from claude_harness.policies import DualAllowList, HistoryBuffer
 
 __all__ = ["MatrixRelay"]
 
 
 class MatrixRelay:
-    """Thin harness-worker adapter wrapping MautrixRelay."""
+    """Thin claude-harness adapter wrapping MautrixRelay."""
 
     def __init__(
         self,

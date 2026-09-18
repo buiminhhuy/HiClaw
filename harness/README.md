@@ -1,15 +1,6 @@
-# Harness Worker
+# Claude Harness Worker
 
-`harness-worker` is an AgentTeams worker runtime, delegating the agent loop to an external CLI tool (Claude Code, Gemini CLI, OpenCode, Codex) instead of running a gateway in-process.
-
-## Supported CLIs
-
-| Harness | CLI | Session resume | Output format |
-|---------|-----|----------------|---------------|
-| `claude` | `claude -p … --output-format stream-json --verbose` | `--resume <session-id>` | stream-json (JSONL) |
-| `gemini` | `gemini --prompt … --yolo --output-format json` | *(single-turn)* | json |
-| `opencode` | `opencode run … --format json --dangerously-skip-permissions` | `--session <id>` | json |
-| `codex` | `codex exec … --json --ephemeral` | `codex exec resume --last` | jsonl |
+`claude-harness` is an AgentTeams worker runtime, delegating the agent loop to the Claude Code CLI instead of running a gateway in-process.
 
 ## Architecture
 
@@ -17,13 +8,13 @@
 Manager (OpenClaw/CoPaw)
     │ openclaw.json
     ▼ (Matrix + MinIO)
-Worker Pod (runtime=harness, AGENTTEAMS_HARNESS_TYPE=claude|gemini|opencode|codex)
-    ├── FileSync:      MinIO ↔ /root/agentteams-fs/agents/<name>  (harness_worker.sync)
+Worker Pod (runtime=claude-harness)
+    ├── FileSync:      MinIO ↔ /root/agentteams-fs/agents/<name>  (claude_harness.sync)
     ├── Bridge:        openclaw.json → native CLI config files
-    ├── Matrix relay:  mautrix + harness_worker.policies
+    ├── Matrix relay:  mautrix + claude_harness.policies
     │       ▼ inbound Matrix message
-    │   asyncio.create_subprocess_exec(<harness-cli> …)
-    │       ▼ stdout (stream-json/json/jsonl), line by line
+    │   asyncio.create_subprocess_exec(claude …)
+    │       ▼ stdout (stream-json), line by line
     │   process_stream_line → reply text + session_id
     │       ▲ send reply (HTML-formatted) to Matrix room
     └── Background:    sync_loop + push_loop
@@ -31,61 +22,60 @@ Worker Pod (runtime=harness, AGENTTEAMS_HARNESS_TYPE=claude|gemini|opencode|code
 
 **Key design decisions:**
 
-- **Request/response model** — each Matrix message spawns one CLI subprocess; no persistent PTY.
-- **`--resume <session-id>`** — Claude harness maintains worker-wide session state across messages and pod restarts.
-- **Vendored storage/Matrix layer** — `sync.py` and `policies.py` are vendored from `hermes/src/hermes_worker/sync.py` and `hermes/src/hermes_matrix/policies.py`; `sync.py` adds a `runtime_home_dir` parameter (`.harness`). Re-vendor them when picking up upstream storage fixes instead of editing hermes.
+- **Request/response model** — each Matrix message spawns one `claude` subprocess; no persistent PTY.
+- **`--resume <session-id>`** — the worker maintains per-room session state across messages and pod restarts.
+- **Vendored storage/Matrix layer** — `sync.py` and `policies.py` are vendored from `hermes/src/hermes_worker/sync.py` and `hermes/src/hermes_matrix/policies.py`; `sync.py` adds a `runtime_home_dir` parameter (`.claude-harness`). Re-vendor them when picking up upstream storage fixes instead of editing hermes.
 
 ## Package structure
 
 ```
-harness/src/harness_worker/
-├── cli.py             # Typer CLI (--harness-type flag)
+harness/src/claude_harness/
+├── cli.py             # Typer CLI — console script `claude-harness`
 ├── config.py          # WorkerConfig
 ├── worker.py          # Bootstrap: start → sync → Matrix relay → _invoke_harness
 ├── bridge.py          # openclaw.json → CLAUDE_HOME, harness-home layout
+├── claude.py          # ClaudeHarness — builds argv, parses stream-json, emits telemetry
 ├── remote_worker.py   # RemoteWorker (local developer environment)
-├── remote_cli.py      # `harness-remote` CLI
-├── matrix_relay.py    # Thin adapter over harness_worker.matrix.MautrixRelay
+├── remote_cli.py      # Typer CLI — console script `claude-harness-remote`
+├── matrix_relay.py    # Thin adapter over claude_harness.matrix.MautrixRelay
 ├── sync.py            # FileSync, push_loop, sync_loop (vendored from hermes)
 ├── policies.py        # DualAllowList, HistoryBuffer, apply_outbound_mentions (vendored from hermes)
-├── matrix.py          # MautrixRelay (mautrix-based Matrix client + HTML formatter)
-└── harness/
-    ├── base.py        # BaseHarness ABC
-    ├── claude.py      # ClaudeHarness (primary, full-featured)
-    ├── gemini.py      # GeminiHarness
-    ├── opencode.py    # OpenCodeHarness
-    └── codex.py       # CodexHarness
+└── matrix.py          # MautrixRelay (mautrix-based Matrix client + HTML formatter)
 ```
+
+There is no adapter/registry layer — `ClaudeHarness` is a plain class instantiated
+directly by `Worker`. An earlier version of this runtime supported Gemini CLI/
+OpenCode/Codex behind a `BaseHarness` ABC; only the Claude path was ever
+maintained (telemetry, streaming, MCP wiring, skills sync), so the other three
+were deleted rather than carried forward under a new name.
 
 ## Components
 
-### `BaseHarness`
+### `ClaudeHarness`
 
-Abstract base class in [harness/base.py](../harness/src/harness_worker/harness/base.py). All adapters implement:
+Defined in [claude.py](../harness/src/claude_harness/claude.py):
 
 | Method | Purpose |
 |--------|---------|
 | `bridge_config(cfg, harness_home)` | Write `settings.json`, generate `CLAUDE.md`, sync `.claude/skills/` symlinks, seed `mcpServers` |
-| `build_command(message, session_id, workspace)` | Build `argv` for one non-interactive CLI invocation |
+| `build_command(message, session_id, workspace)` | Build `argv` for one non-interactive `claude` invocation |
 | `process_stream_line(line, state)` | Parse one JSONL line from streaming stdout (mutates `state`) |
 | `parse_output(stdout_bytes)` | Full-output parse; returns `(text, session_id)` |
-| `env(openclaw_cfg)` | Return per-harness auth env vars merged into subprocess environment |
-
-Harnesses register via `@register_harness("name")`; the factory `build_harness(name)` looks up the registry.
+| `env(openclaw_cfg)` | Return auth env vars merged into the subprocess environment |
 
 ### `Worker`
 
-Bootstrap in [worker.py](../harness/src/harness_worker/worker.py):
+Bootstrap in [worker.py](../harness/src/claude_harness/worker.py):
 
 1. Downloads all files from MinIO (`FileSync.mirror_all`).
 2. Reads `openclaw.json` and re-authenticates the Matrix session.
-3. Calls `harness.bridge_config(openclaw_cfg, harness_home)` to write native config.
+3. Calls `ClaudeHarness().bridge_config(openclaw_cfg, harness_home)` to write native config.
 4. Starts background `sync_loop` + `push_loop` tasks.
-5. Enters `_run_matrix_relay()`: subscribes to Matrix and invokes harness per message.
+5. Enters `_run_matrix_relay()`: subscribes to Matrix and invokes Claude per message.
 
 ### `MatrixRelay`
 
-Thin adapter over `harness_worker.matrix.MautrixRelay`. On each inbound message:
+Thin adapter over `claude_harness.matrix.MautrixRelay`. On each inbound message:
 
 1. Skips own messages and replayed history (events before startup timestamp).
 2. Evaluates `DualAllowList.permits(sender, is_dm)`.
@@ -95,7 +85,7 @@ Thin adapter over `harness_worker.matrix.MautrixRelay`. On each inbound message:
 
 ## Worker._invoke_harness
 
-File: [harness/src/harness_worker/worker.py](../harness/src/harness_worker/worker.py)
+File: [claude_harness/worker.py](../harness/src/claude_harness/worker.py)
 
 ```python
 proc = await asyncio.create_subprocess_exec(
@@ -114,13 +104,13 @@ text = "".join(state.get("text_chunks", [])) or "(no response)"
 new_sid = state.get("session_id")
 ```
 
-Default timeout: `AGENTTEAMS_HARNESS_TIMEOUT_MS=600000` (10 minutes).
+Default timeout: `AGENTTEAMS_CLAUDE_HARNESS_TIMEOUT_MS=600000` (10 minutes).
 
 If a single JSON line from `claude --output-format stream-json` exceeds the 64 KB asyncio buffer limit, the worker catches `asyncio.LimitOverrunError`, appends a truncation warning to the reply, drains the buffer, and breaks — rather than crashing.
 
 ## ClaudeHarness — stream-json format
 
-File: [harness/src/harness_worker/harness/claude.py](../harness/src/harness_worker/harness/claude.py)
+File: [claude_harness/claude.py](../harness/src/claude_harness/claude.py)
 
 ### Event format
 
@@ -180,9 +170,7 @@ File: [harness/src/harness_worker/harness/claude.py](../harness/src/harness_work
 | `mcp__*` | `🔌 **MCP** <server>: <first-arg>` |
 | other | `⚙️ **<Name>**: <args>` |
 
-## Per-harness CLI details
-
-### Claude (`claude`)
+## Claude CLI details
 
 | Setting | Value |
 |---------|-------|
@@ -200,7 +188,7 @@ File: [harness/src/harness_worker/harness/claude.py](../harness/src/harness_work
 
 ```
 1. Existing settings.json on disk          (user customisations survive restarts)
-2. .harness/claude.settings.json           (per-worker MinIO override)
+2. .claude-harness/claude.settings.json    (per-worker MinIO override)
 3. Controller-managed fields (always win):
      model, permissions (dontAsk + allow mcp__*), env (ANTHROPIC_*, timeouts)
 ```
@@ -225,9 +213,9 @@ File: [harness/src/harness_worker/harness/claude.py](../harness/src/harness_work
 }
 ```
 
-Entries from `config/mcporter.json` are fully controller-owned (stale entries replaced on every bridge run). Entries from `.harness/mcp-local.json` are merged after and win on name collision. Existing `.claude.json` content is preserved.
+Entries from `config/mcporter.json` are fully controller-owned (stale entries replaced on every bridge run). Entries from `.claude-harness/mcp-local.json` are merged after and win on name collision. Existing `.claude.json` content is preserved.
 
-**Stdio MCP server override:** drop `.harness/mcp-local.json` in the worker's MinIO path:
+**Stdio MCP server override:** drop `.claude-harness/mcp-local.json` in the worker's MinIO path:
 
 ```json
 {
@@ -235,13 +223,13 @@ Entries from `config/mcporter.json` are fully controller-owned (stale entries re
     "my-tool": {
       "transport": "stdio",
       "command": "python3",
-      "args": ["/root/agentteams-fs/agents/<worker>/.harness/my_server.py"]
+      "args": ["/root/agentteams-fs/agents/<worker>/.claude-harness/my_server.py"]
     }
   }
 }
 ```
 
-**`.claudeignore`** — drop `.harness/claudeignore` in MinIO to control which files Claude Code ignores. If absent, a default is written (ignores `.harness/`, `.claude/`, `*.tar`, `*.log`).
+**`.claudeignore`** — drop `.claude-harness/claudeignore` in MinIO to control which files Claude Code ignores. If absent, a default is written (ignores `.claude-harness/`, `.claude/`, `*.tar`, `*.log`).
 
 **Hot-reload** — `_on_files_pulled` detects three change categories:
 
@@ -250,33 +238,6 @@ Entries from `config/mcporter.json` are fully controller-owned (stale entries re
 | `openclaw.json` | Full re-bridge (model + env + settings.json + CLAUDE.md + skills + .claudeignore) |
 | `SOUL.md` or `AGENTS.md` | Lightweight: regenerate `CLAUDE.md` only |
 | `skills/*` | Lightweight: re-sync `.claude/skills/` symlinks only |
-
-### Gemini (`gemini`)
-
-| Setting | Value |
-|---------|-------|
-| Non-interactive flag | `gemini --prompt "<message>" --yolo` |
-| Session resume | Not supported — single-turn only |
-| Output format | `--output-format json` |
-| Config file | `~/.gemini/settings.json` |
-| Required env | `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
-
-### OpenCode (`opencode`)
-
-| Setting | Value |
-|---------|-------|
-| Non-interactive flag | `opencode run "<message>" --format json --dangerously-skip-permissions` |
-| Session resume | `--session <id>` or `--continue` |
-| Config file | `~/.config/opencode/opencode.json` |
-
-### Codex (`codex`)
-
-| Setting | Value |
-|---------|-------|
-| Non-interactive flag | `codex exec "<message>" --json --ephemeral --sandbox workspace-write` |
-| Session resume | `codex exec resume --last "<message>"` |
-| Output format | JSONL |
-| Required env | `CODEX_API_KEY` or `OPENAI_API_KEY` |
 
 ## LLM routing via Higress
 
@@ -291,9 +252,10 @@ Claude CLI always sends to `ANTHROPIC_BASE_URL + /v1/messages`. Setting `ANTHROP
 
 **Credential priority** (resolved at `bridge_config` time):
 
-1. `AGENTTEAMS_CLAUDE_BASE_URL` + `AGENTTEAMS_LLM_API_KEY` — explicit operator override
-2. `AGENTTEAMS_AI_GATEWAY_URL` + `AGENTTEAMS_WORKER_GATEWAY_KEY` — default in-cluster (injected by controller into every worker pod)
-3. `_DEFAULT_BASE_URL` + `_DEFAULT_API_KEY` — local dev fallback
+1. `AGENTTEAMS_USE_CLAUDE_SUBSCRIPTION=1` — claude.ai subscription (OAuth via `claude login`)
+2. `AGENTTEAMS_CLAUDE_BASE_URL` + `AGENTTEAMS_LLM_API_KEY` — explicit operator override
+3. `AGENTTEAMS_AI_GATEWAY_URL` + `AGENTTEAMS_WORKER_GATEWAY_KEY` — default in-cluster (injected by controller into every worker pod)
+4. `_DEFAULT_BASE_URL` + `_DEFAULT_API_KEY` — local dev fallback
 
 **Model constraint:** the model name in the request body must match a Higress AI route `modelPredicate`. Model is read from `openclaw.json → agents.defaults.model.primary` (format `"agentteams-gateway/MiniMax-M2"` → `"MiniMax-M2"`). If no matching predicate exists, the gateway returns 404.
 
@@ -304,10 +266,10 @@ On startup, `ClaudeHarness.bridge_config(openclaw_cfg, harness_home)` writes:
 | File | Content |
 |------|---------|
 | `workspace/.claude/settings.json` | model, permissions (`dontAsk`), env vars |
-| `workspace/.claude.json` | MCP servers (from `config/mcporter.json` or `.harness/mcp-local.json`) |
+| `workspace/.claude.json` | MCP servers (from `config/mcporter.json` or `.claude-harness/mcp-local.json`) |
 | `workspace/CLAUDE.md` | Concatenation of `SOUL.md` + `AGENTS.md` |
 | `workspace/.claude/skills/` | Symlinks to `workspace/skills/` |
-| `workspace/.claudeignore` | From `.harness/claudeignore` or default |
+| `workspace/.claudeignore` | From `.claude-harness/claudeignore` or default |
 | `workspace/memory/` | Auto-created so Claude Code's auto-memory feature can write here |
 
 ## Session continuity
@@ -322,9 +284,16 @@ Session state is tracked **per Matrix room** and persisted to
 A single worker-wide session id would splice unrelated rooms into one
 conversation, so the legacy `sessions/current` file is ignored on startup.
 
+**Not synced to MinIO** — `sync.py` excludes the whole `<runtime_home_dir>/`
+(`.claude-harness/`) from the standard push/pull, so session state, local
+overrides, and the readiness marker are pod-local and reset on every
+container recreate for in-cluster workers. `RemoteWorker` (developer
+machine) layers a separate, scoped push of a curated subset on top — see
+[remote_worker.py](../harness/src/claude_harness/remote_worker.py).
+
 ## Matrix reply formatting
 
-Outbound replies are sent as `org.matrix.custom.html` with `formatted_body` generated by `harness_worker.matrix._to_html()`:
+Outbound replies are sent as `org.matrix.custom.html` with `formatted_body` generated by `claude_harness.matrix._to_html()`:
 
 - `<think>…</think>` blocks → `<blockquote>💭 …</blockquote>` (Element.io does not render `<details>`)
 - Markdown (bold, blockquote, inline code, links) → HTML via `markdown-it-py`
@@ -338,14 +307,8 @@ kind: Worker
 metadata:
   name: my-claude-worker
 spec:
-  runtime: harness
+  runtime: claude-harness
   model: MiniMax-M2          # must match a Higress AI route modelPredicate
-  env:
-    # claude | gemini | opencode | codex  (default: claude).
-    # Deliberately not a CRD field: the CLI variant is runtime-local, so it
-    # rides on spec.env. mergeUserEnv only drops keys the controller itself
-    # sets, and AGENTTEAMS_HARNESS_TYPE is not one of them.
-    AGENTTEAMS_HARNESS_TYPE: claude
   resources:
     requests:
       cpu: 100m
@@ -372,7 +335,7 @@ spec:
 
 Set `containerManaged: false` so the controller provisions the Matrix identity,
 rooms and storage but never creates a pod; the process is started locally with
-`harness-remote`:
+`claude-harness-remote`:
 
 ```yaml
 apiVersion: agentteams.io/v1beta1
@@ -380,7 +343,7 @@ kind: Worker
 metadata:
   name: dev-laptop
 spec:
-  runtime: harness
+  runtime: claude-harness
   model: MiniMax-M2
   containerManaged: false
 ```
@@ -393,7 +356,7 @@ spec:
 ├── SOUL.md                                     ← agent persona / values (Manager-managed)
 ├── AGENTS.md                                   ← agent behaviour rules (Manager-managed)
 ├── CLAUDE.md                                   ← generated by bridge from SOUL.md + AGENTS.md
-├── .claudeignore                               ← generated by bridge from .harness/claudeignore
+├── .claudeignore                               ← generated by bridge from .claude-harness/claudeignore
 ├── .claude.json                                ← generated by bridge (project-level MCP servers)
 ├── config/
 │   └── mcporter.json                           ← MCP server list HTTP/SSE (Manager-managed)
@@ -405,20 +368,20 @@ spec:
 │   ├── settings.json                           ← generated by bridge_config
 │   └── skills/
 │       └── <skill-name> → …/skills/<skill-name>  ← absolute symlink
-└── .harness/                                   ← harness_home (not synced to MinIO)
+└── .claude-harness/                            ← harness_home (not synced to MinIO)
     ├── ready                                   ← touched when relay is up (readiness probe)
     ├── claude.settings.json                    ← optional settings override (deep-merged before controller fields)
     ├── mcp-local.json                          ← optional stdio/HTTP MCP servers
     ├── claudeignore                            ← optional .claudeignore source
     └── sessions/
-        └── current                             ← last Claude session-id
+        └── rooms.json                          ← {room_id: session_id} map
 ```
 
 **Ownership:**
 - **Manager-managed (read-only in worker):** `openclaw.json`, `SOUL.md`, `AGENTS.md`, `config/mcporter.json`, `skills/`
 - **Bridge-generated (derived, not pushed to MinIO):** `CLAUDE.md`, `.claudeignore`, `.claude.json`, `.claude/settings.json`, `.claude/skills/` symlinks
-- **Worker-managed (pushed to MinIO):** `memory/`, `MEMORY.md`, `.harness/sessions/`
-- **Harness-local overrides (in MinIO, not pushed back):** `.harness/claude.settings.json`, `.harness/mcp-local.json`, `.harness/claudeignore`
+- **Worker-managed (pushed to MinIO):** `memory/`, `MEMORY.md`
+- **Harness-local, pod-only (never synced either direction for in-cluster workers):** the whole `.claude-harness/` dir — `sessions/`, `claude.settings.json`, `mcp-local.json`, `claudeignore`. An operator seeds these by writing directly to the MinIO path once; the worker reads them at bridge time but never pushes them back.
 
 ## Environment variables
 
@@ -440,8 +403,8 @@ spec:
 |----------|---------|-------------|
 | `AGENTTEAMS_FS_BUCKET` | `agentteams-storage` | MinIO bucket |
 | `AGENTTEAMS_INSTALL_DIR` | `/root/agentteams-fs/agents` | Workspace root |
-| `AGENTTEAMS_HARNESS_TYPE` | `claude` | CLI variant: `claude\|gemini\|opencode\|codex` |
-| `AGENTTEAMS_HARNESS_TIMEOUT_MS` | `600000` | Per-invocation timeout (ms) |
+| `AGENTTEAMS_CLAUDE_HARNESS_TIMEOUT_MS` | `600000` | Per-invocation timeout (ms) |
+| `AGENTTEAMS_CLAUDE_HARNESS_ENV_PASSTHROUGH` | — | Comma-separated extra env var names to forward to the `claude` subprocess |
 | `AGENTTEAMS_CLAUDE_BASE_URL` | — | Explicit LLM base URL (overrides gateway) |
 | `AGENTTEAMS_LLM_API_KEY` | — | Explicit LLM API key (overrides gateway key) |
 | `AGENTTEAMS_USE_CLAUDE_SUBSCRIPTION` | — | `1` to use `claude login` OAuth instead of the gateway |
@@ -450,7 +413,7 @@ spec:
 
 Only the "required" block above is injected by the controller. Everything under
 "optional" is worker-local: set it in `Worker.spec.env`, or pass the matching
-`harness-remote` flag when running outside the cluster.
+`claude-harness-remote` flag when running outside the cluster.
 
 ## Adding a new model
 
@@ -460,7 +423,7 @@ Only the "required" block above is injected by the controller. Everything under
    spec:
      workers:
        - name: dev-1
-         runtime: harness
+         runtime: claude-harness
          model: MiniMax-M2.7
    ```
 3. The harness reads `agents.defaults.model.primary` from `openclaw.json` and passes it directly to `claude --model` and every API request. No image rebuild required.
@@ -469,27 +432,29 @@ Only the "required" block above is injected by the controller. Everything under
 
 ```bash
 # Build (from the repo root — the controller image is a base stage for harness)
-make build-harness-worker VERSION=<VER> DOCKER_PLATFORM=linux/amd64 \
+make build-claude-harness VERSION=<VER> DOCKER_PLATFORM=linux/amd64 \
   REGISTRY=<registry> REPO=<repo> \
   HIGRESS_REGISTRY=<higress-registry>
 
 # Push via crane (avoids Docker Desktop VM ↔ host network limitations)
-docker tag agentteams/harness-worker:<VER> <registry>/<repo>/agentteams-harness-worker:<VER>
-docker save <registry>/<repo>/agentteams-harness-worker:<VER> -o /tmp/harness.tar
-crane push --insecure /tmp/harness.tar <registry>/<repo>/agentteams-harness-worker:<VER>
+docker tag agentteams/claude-harness:<VER> <registry>/<repo>/agentteams-claude-harness:<VER>
+docker save <registry>/<repo>/agentteams-claude-harness:<VER> -o /tmp/claude-harness.tar
+crane push --insecure /tmp/claude-harness.tar <registry>/<repo>/agentteams-claude-harness:<VER>
 
-# Point the controller at the image. The harness image is opt-in — the installer
-# leaves AGENTTEAMS_HARNESS_WORKER_IMAGE empty unless it is set explicitly.
-#   installer:  AGENTTEAMS_INSTALL_HARNESS_WORKER_IMAGE=<registry>/<repo>/agentteams-harness-worker:<VER>
-#   helm:       --set worker.defaultImage.harness.repository=<registry>/<repo>/agentteams-harness-worker \
-#               --set worker.defaultImage.harness.tag=<VER>
+# Point the controller at the image. The claude-harness image is opt-in — the
+# installer leaves AGENTTEAMS_CLAUDE_HARNESS_IMAGE empty unless it is set
+# explicitly (AGENTTEAMS_HARNESS_WORKER_IMAGE is still honored as a deprecated
+# fallback for one deploy window — see the controller's envOrDeprecatedOrDefault).
+#   installer:  AGENTTEAMS_INSTALL_CLAUDE_HARNESS_IMAGE=<registry>/<repo>/agentteams-claude-harness:<VER>
+#   helm:       --set worker.defaultImage.claudeHarness.repository=<registry>/<repo>/agentteams-claude-harness \
+#               --set worker.defaultImage.claudeHarness.tag=<VER>
 
 # Tail tool-use logs in real time
-kubectl logs -n <namespace> -l agentteams.io/runtime=harness -f
+kubectl logs -n <namespace> -l agentteams.io/runtime=claude-harness -f
 
 # Rolling update after image push (patch the Worker CR, then bounce the pod)
 kubectl patch worker <worker-name> -n <namespace> --type=merge \
-  -p='{"spec":{"image":"<registry>/<repo>/agentteams-harness-worker:<VER>"}}'
+  -p='{"spec":{"image":"<registry>/<repo>/agentteams-claude-harness:<VER>"}}'
 kubectl delete pod agentteams-worker-<worker-name> -n <namespace>
 ```
 

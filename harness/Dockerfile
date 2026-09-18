@@ -1,5 +1,5 @@
 # ============================================================
-# AgentTeams Harness Worker — delegates to Claude Code
+# AgentTeams Claude Harness Worker — delegates to Claude Code
 # ============================================================
 #
 # Build args:
@@ -35,7 +35,7 @@ ARG PIP_INDEX_URL=https://pypi.org/simple/
 ARG NPM_REGISTRY=https://registry.npmjs.org/
 
 # Pinned so image builds are reproducible and the JSON / JSONL stream format
-# harness_worker/claude.py depends on cannot change under us. Bump
+# claude_harness/claude.py depends on cannot change under us. Bump
 # deliberately, then re-run the parser tests.
 ARG CLAUDE_CODE_VERSION=2.1.235
 ARG MCPORTER_VERSION=0.13.7
@@ -97,23 +97,23 @@ COPY --from=mc /usr/bin/mc /usr/local/bin/mc.bin
 # AgentTeams CLI — for worker/team/human management via controller REST API
 COPY --from=agentteams-controller /usr/local/bin/agt /usr/local/bin/agt
 
-# Copy harness-worker source directly to site-packages
-COPY src/harness_worker /opt/venv/harness/lib/python3.11/site-packages/harness_worker
+# Copy claude-harness source directly to site-packages
+COPY src/claude_harness /opt/venv/harness/lib/python3.11/site-packages/claude_harness
 
 # Create entrypoint wrapper script
-RUN printf '#!/bin/bash\nexec /opt/venv/harness/bin/python -m harness_worker.cli "$@"\n' \
-        > /usr/local/bin/harness-worker && \
-    chmod +x /usr/local/bin/harness-worker
+RUN printf '#!/bin/bash\nexec /opt/venv/harness/bin/python -m claude_harness.cli "$@"\n' \
+        > /usr/local/bin/claude-harness && \
+    chmod +x /usr/local/bin/claude-harness
 
 # Entrypoint script
-COPY --chmod=755 scripts/harness-worker-entrypoint.sh /opt/agentteams/scripts/harness-worker-entrypoint.sh
+COPY --chmod=755 scripts/claude-harness-entrypoint.sh /opt/agentteams/scripts/claude-harness-entrypoint.sh
 
 # Shared environment bootstrap and credential management
 # (agentteams-env.sh, oss-credentials.sh) — same named build-context as hermes/copaw.
 COPY --from=shared . /opt/agentteams/scripts/lib/
 
 # mc wrapper: auto-refreshes STS credentials before every mc invocation
-# (no-op in local mode). harness_worker.sync shells out to `mc`, so it must
+# (no-op in local mode). claude_harness.sync shells out to `mc`, so it must
 # resolve to the wrapper, not the raw binary.
 RUN chmod +x /opt/agentteams/scripts/lib/mc-wrapper.sh && \
     ln -sf /opt/agentteams/scripts/lib/mc-wrapper.sh /usr/local/bin/mc
@@ -125,4 +125,4 @@ RUN mkdir -p /root/agentteams-fs/agents
 
 WORKDIR /root/agentteams-fs/agents
 
-ENTRYPOINT ["/opt/agentteams/scripts/harness-worker-entrypoint.sh"]
+ENTRYPOINT ["/opt/agentteams/scripts/claude-harness-entrypoint.sh"]

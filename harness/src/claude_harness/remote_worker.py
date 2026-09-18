@@ -2,21 +2,21 @@
 
 ``RemoteWorker`` runs the harness agent in a developer's local environment
 (laptop/workstation) instead of as a controller-managed Kubernetes pod. It is a
-thin subclass of :class:`harness_worker.worker.Worker`: the entire bootstrap,
+thin subclass of :class:`claude_harness.worker.Worker`: the entire bootstrap,
 Matrix relay, and ``claude -p`` invocation flow is inherited unchanged — the
 harness worker is not modified.
 
 The only remote-specific behaviour added here is a **scoped push of agent-setup
-files under ``.harness/``** so a developer does not lose their local setup when
+files under ``.claude-harness/``** so a developer does not lose their local setup when
 switching the machine running the remote worker. The standard ``push_loop``
-excludes the whole runtime-home dir (``.harness/``); cluster workers keep it
+excludes the whole runtime-home dir (``.claude-harness/``); cluster workers keep it
 local, but remote workers persist a curated subset to MinIO so it follows the
 developer across environments. Pull is already handled by ``FileSync.mirror_all``
-at startup (it mirrors the full ``agents/<name>/`` prefix, including ``.harness/``).
+at startup (it mirrors the full ``agents/<name>/`` prefix, including ``.claude-harness/``).
 
 Security boundary: ``.env`` (Matrix token, gateway key, MinIO creds) is never
 pushed. A developer can opt individual files out of the push via
-``.harness/.harnessignore`` (gitignore-style patterns).
+``.claude-harness/.claude-harnessignore`` (gitignore-style patterns).
 """
 from __future__ import annotations
 
@@ -26,25 +26,25 @@ import logging
 import time
 from pathlib import Path
 
-from harness_worker.sync import _mc
+from claude_harness.sync import _mc
 
-from harness_worker.worker import Worker, console
+from claude_harness.worker import Worker, console
 
 logger = logging.getLogger(__name__)
 
 # Non-secret agent-setup files persisted to MinIO so they follow the developer.
 _HARNESS_SETUP_FILES = ("mcp-local.json", "claude.settings.json", "claudeignore")
-# Directories under .harness/ whose contents are persisted (recursively).
+# Directories under .claude-harness/ whose contents are persisted (recursively).
 _HARNESS_SETUP_DIRS = ("sessions",)
-# Never pushed regardless of .harnessignore (secrets / local-only control file).
-_NEVER_PUSH = {".env", ".harnessignore"}
+# Never pushed regardless of .claude-harnessignore (secrets / local-only control file).
+_NEVER_PUSH = {".env", ".claude-harnessignore"}
 
 
 class RemoteWorker(Worker):
     """Harness worker for a local developer environment.
 
     Inherits the full bootstrap/relay/invoke flow from :class:`Worker` and only
-    layers a scoped ``.harness/`` setup push on top.
+    layers a scoped ``.claude-harness/`` setup push on top.
     """
 
     async def start(self) -> bool:
@@ -52,13 +52,13 @@ class RemoteWorker(Worker):
         if ok:
             asyncio.create_task(self._harness_push_loop(check_interval=5))
             console.print(
-                "[dim]Remote mode: persisting .harness/ setup to MinIO "
-                "(opt out via .harness/.harnessignore).[/dim]"
+                "[dim]Remote mode: persisting .claude-harness/ setup to MinIO "
+                "(opt out via .claude-harness/.claude-harnessignore).[/dim]"
             )
         return ok
 
     # ------------------------------------------------------------------ #
-    # Scoped .harness/ setup push                                        #
+    # Scoped .claude-harness/ setup push                                        #
     # ------------------------------------------------------------------ #
     async def _harness_push_loop(self, check_interval: int = 5) -> None:
         last_push_time: float = time.time()
@@ -78,7 +78,7 @@ class RemoteWorker(Worker):
                 logger.warning("harness setup push error: %s", exc)
 
     def _push_harness_setup(self, since: float = 0) -> list[str]:
-        """Upload changed, non-secret ``.harness/`` setup files to MinIO.
+        """Upload changed, non-secret ``.claude-harness/`` setup files to MinIO.
 
         Mirrors ``FileSync.push_local``'s cat-compare semantics (skip when the
         remote copy is byte-identical) so a static workspace produces no churn.
@@ -115,7 +115,7 @@ class RemoteWorker(Worker):
             except OSError:
                 continue
 
-            rel = path.relative_to(self.config.workspace_dir).as_posix()  # ".harness/..."
+            rel = path.relative_to(self.config.workspace_dir).as_posix()  # ".claude-harness/..."
             key = f"{self.sync._prefix}/{rel}"
             try:
                 remote = self.sync._cat(key)
@@ -130,7 +130,7 @@ class RemoteWorker(Worker):
         return pushed
 
     def _harnessignore_patterns(self) -> list[str]:
-        ignore_file = self._harness_home / ".harnessignore"
+        ignore_file = self._harness_home / ".claude-harnessignore"
         if not ignore_file.exists():
             return []
         patterns: list[str] = []
@@ -140,12 +140,12 @@ class RemoteWorker(Worker):
                 if line and not line.startswith("#"):
                     patterns.append(line)
         except OSError as exc:
-            logger.warning("could not read .harnessignore: %s", exc)
+            logger.warning("could not read .claude-harnessignore: %s", exc)
         return patterns
 
     @staticmethod
     def _is_ignored(rel_to_home: str, patterns: list[str]) -> bool:
-        """gitignore-style match of a ``.harness/``-relative path against patterns.
+        """gitignore-style match of a ``.claude-harness/``-relative path against patterns.
 
         A trailing ``/`` makes a directory prefix match; otherwise the pattern is
         fnmatch-ed against the full relative path, its first path component, and
