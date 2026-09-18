@@ -14,7 +14,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
 
-from harness_worker.harness import build_harness
+from harness_worker.claude import ClaudeHarness
 
 logger = logging.getLogger(__name__)
 _MISSING: Any = object()
@@ -53,13 +53,11 @@ def _install_from_template(dst: Path, template_name: str) -> bool:
 def bridge_openclaw_to_harness(
     openclaw_cfg: dict[str, Any],
     harness_home: Path,
-    harness_type: str,
 ) -> None:
     harness_home.mkdir(parents=True, exist_ok=True)
     in_container = _is_in_container()
 
-    harness_adapter = build_harness(harness_type)
-    harness_adapter.bridge_config(openclaw_cfg, harness_home)
+    ClaudeHarness().bridge_config(openclaw_cfg, harness_home)
 
     os.environ["AGENTTEAMS_HARNESS_HOME"] = str(harness_home)
 

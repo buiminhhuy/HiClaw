@@ -50,7 +50,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from harness_worker.harness.base import BaseHarness, register_harness
 from harness_worker.telemetry import (
     LLM_REQUEST,
     SESSION_INIT,
@@ -165,8 +164,9 @@ def _build_anthropic_env(base_url: str, api_key: str, model: str) -> dict[str, s
     return env
 
 
-@register_harness("claude")
-class ClaudeHarness(BaseHarness):
+class ClaudeHarness:
+    """One subprocess invocation per message. No persistent process."""
+
     name = "claude"
 
     def __init__(self) -> None:

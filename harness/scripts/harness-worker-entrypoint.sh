@@ -8,8 +8,6 @@
 #   AGENTTEAMS_FS_ACCESS_KEY - MinIO access key (required in local mode)
 #   AGENTTEAMS_FS_SECRET_KEY - MinIO secret key (required in local mode)
 #   AGENTTEAMS_RUNTIME       - "aliyun" for cloud mode (uses RRSA/STS via agentteams-env.sh)
-#   AGENTTEAMS_HARNESS_TYPE  - claude | codex | opencode | gemini (default: claude)
-#                              Set via Worker spec.env; not injected by the controller.
 #   TZ                       - Timezone (optional)
 
 set -e
@@ -26,7 +24,6 @@ WORKER_NAME="${AGENTTEAMS_WORKER_NAME:?AGENTTEAMS_WORKER_NAME is required}"
 # ${HOME}/.harness/.
 INSTALL_DIR="${AGENTTEAMS_INSTALL_DIR:-/root/agentteams-fs/agents}"
 WORKSPACE="${INSTALL_DIR}/${WORKER_NAME}"
-HARNESS_TYPE="${AGENTTEAMS_HARNESS_TYPE:-claude}"
 
 log() {
     echo "[agentteams-harness-worker $(date '+%Y-%m-%d %H:%M:%S')] $1"
@@ -92,7 +89,6 @@ _start_readiness_reporter() {
 log "Starting harness-worker: ${WORKER_NAME}"
 log "  FS endpoint: ${FS_ENDPOINT}"
 log "  Install dir: ${INSTALL_DIR}"
-log "  Harness type: ${HARNESS_TYPE}"
 
 # A stale marker from a previous container would make the reporter fire before
 # this process has actually bridged its config.
@@ -105,7 +101,6 @@ CMD_ARGS=(
     --fs-secret "${FS_SECRET_KEY}"
     --fs-bucket "${FS_BUCKET}"
     --install-dir "${INSTALL_DIR}"
-    --harness-type "${HARNESS_TYPE}"
 )
 
 _start_readiness_reporter
