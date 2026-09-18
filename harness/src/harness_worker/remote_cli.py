@@ -64,7 +64,6 @@ def run(
     model: Optional[str] = typer.Option(None, "--model", envvar="AGENTTEAMS_MODEL", help="Override LLM model (e.g. claude-opus-4-5). In subscription mode defaults to claude-sonnet-4-5 if not set."),
     install_dir: Optional[Path] = typer.Option(None, "--install-dir", envvar="AGENTTEAMS_INSTALL_DIR", help="Local workspace root (default ~/.agentteams/agents)"),
     sync_interval: int = typer.Option(60, "--sync-interval", envvar="AGENTTEAMS_SYNC_INTERVAL", help="Pull interval (seconds)"),
-    harness_type: str = typer.Option("claude", "--harness-type", envvar="AGENTTEAMS_HARNESS_TYPE", help="Harness CLI: claude|gemini|opencode|codex"),
 ) -> None:
     # When a subcommand (e.g. `attach`) is invoked, do not start the worker.
     if ctx.invoked_subcommand is not None:
@@ -107,7 +106,6 @@ def run(
         minio_secure=fs_secure,
         sync_interval=sync_interval,
         install_dir=install_dir.expanduser() if install_dir else _default_install_dir(),
-        harness_type=harness_type,
         model=model,
     )
     _run_worker(RemoteWorker(config))
@@ -130,7 +128,6 @@ def _load_session_map(path: Path) -> dict[str, str]:
 def attach(
     name: Optional[str] = typer.Option(None, "--name", envvar="AGENTTEAMS_WORKER_NAME", help="Worker identity"),
     install_dir: Optional[Path] = typer.Option(None, "--install-dir", envvar="AGENTTEAMS_INSTALL_DIR", help="Local workspace root"),
-    harness_type: str = typer.Option("claude", "--harness-type", envvar="AGENTTEAMS_HARNESS_TYPE", help="Harness CLI"),
     room: Optional[str] = typer.Option(None, "--room", help="Matrix room id to attach to (required when the worker has more than one session)"),
 ) -> None:
     """Attach an interactive session to one of the worker's conversations.
@@ -144,8 +141,6 @@ def attach(
     """
     if not name:
         raise typer.BadParameter("missing --name / AGENTTEAMS_WORKER_NAME")
-    if harness_type != "claude":
-        raise typer.BadParameter("attach currently supports --harness-type claude only")
 
     base = install_dir.expanduser() if install_dir else _default_install_dir()
     workspace = base / name

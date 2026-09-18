@@ -11,7 +11,7 @@ import logging
 import pytest
 
 from harness_worker import telemetry as tm
-from harness_worker.harness.claude import ClaudeHarness
+from harness_worker.claude import ClaudeHarness
 from harness_worker.logging_setup import JSONFormatter
 
 
