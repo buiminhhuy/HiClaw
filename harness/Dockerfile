@@ -1,5 +1,5 @@
 # ============================================================
-# AgentTeams Harness Worker — delegates to Claude Code / Gemini CLI / OpenCode / Codex
+# AgentTeams Harness Worker — delegates to Claude Code
 # ============================================================
 #
 # Build args:
@@ -8,7 +8,7 @@
 #   APT_MIRROR                  - Debian mirror (default: official)
 #   PIP_INDEX_URL               - PyPI mirror (default: official)
 #   NPM_REGISTRY                - npm registry (default: official)
-#   *_CLI_VERSION               - pinned CLI agent versions (see below)
+#   CLAUDE_CODE_VERSION         - pinned Claude Code CLI version (see below)
 #   BAZELISK_ARCH                - amd64/arm64; selects the pre-fetched bazelisk-linux-<arch>
 #                                   binary the Makefile places in the build context
 #
@@ -34,13 +34,10 @@ ARG APT_MIRROR=
 ARG PIP_INDEX_URL=https://pypi.org/simple/
 ARG NPM_REGISTRY=https://registry.npmjs.org/
 
-# CLI agent versions are pinned so image builds are reproducible and the
-# JSON / JSONL stream formats the parsers in harness_worker/harness/ depend on
-# cannot change under us. Bump deliberately, then re-run the parser tests.
+# Pinned so image builds are reproducible and the JSON / JSONL stream format
+# harness_worker/claude.py depends on cannot change under us. Bump
+# deliberately, then re-run the parser tests.
 ARG CLAUDE_CODE_VERSION=2.1.235
-ARG GEMINI_CLI_VERSION=0.55.1
-ARG OPENCODE_VERSION=1.18.18
-ARG CODEX_VERSION=0.148.0
 ARG MCPORTER_VERSION=0.13.7
 
 RUN if [ -n "${APT_MIRROR}" ]; then \
@@ -65,13 +62,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends nodejs npm && \
     rm -rf /var/lib/apt/lists/*
 
-# Install all four CLI agents + mcporter via npm (pinned)
+# Install Claude Code + mcporter via npm (pinned)
 RUN npm config set registry "${NPM_REGISTRY}" && \
     npm install -g \
         "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
-        "@google/gemini-cli@${GEMINI_CLI_VERSION}" \
-        "opencode-ai@${OPENCODE_VERSION}" \
-        "@openai/codex@${CODEX_VERSION}" \
         "mcporter@${MCPORTER_VERSION}" && \
     rm -rf /root/.npm
 

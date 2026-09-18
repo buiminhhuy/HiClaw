@@ -16,8 +16,8 @@ from rich.console import Console
 from rich.panel import Panel
 
 from harness_worker.bridge import bridge_openclaw_to_harness, _is_in_container, _port_remap
+from harness_worker.claude import ClaudeHarness
 from harness_worker.config import WorkerConfig
-from harness_worker.harness import build_harness
 from harness_worker.matrix_relay import MatrixRelay
 from harness_worker.sync import FileSync, push_loop, sync_loop
 from harness_worker.telemetry import (
@@ -117,7 +117,7 @@ class Worker:
             Panel.fit(
                 f"[bold green]Harness Worker[/bold green]\n"
                 f"Worker: [cyan]{self.worker_name}[/cyan]\n"
-                f"Harness type: [cyan]{self.config.harness_type}[/cyan]\n"
+                f"Agent: [cyan]Claude Code[/cyan]\n"
                 f"HARNESS_HOME: [cyan]{self._harness_home}[/cyan]",
                 title="Starting",
             )
@@ -154,7 +154,7 @@ class Worker:
 
         console.print("[yellow]Bridging openclaw.json → harness config...[/yellow]")
         try:
-            self._harness = build_harness(self.config.harness_type)
+            self._harness = ClaudeHarness()
             self._harness.bridge_config(openclaw_cfg, self._harness_home)
         except Exception as exc:
             console.print(f"[red]Bridge failed: {exc}[/red]")

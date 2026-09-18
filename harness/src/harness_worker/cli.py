@@ -25,7 +25,6 @@ def main() -> None:
         fs_bucket: str = typer.Option("agentteams-storage", "--fs-bucket", help="MinIO bucket"),
         sync_interval: int = typer.Option(300, "--sync-interval", help="Sync interval (seconds)"),
         install_dir: Optional[str] = typer.Option(None, "--install-dir", help="Base install dir"),
-        harness_type: str = typer.Option("claude", "--harness-type", help="Harness CLI: claude|gemini|opencode|codex"),
     ) -> None:
         config = WorkerConfig(
             worker_name=name,
@@ -35,7 +34,6 @@ def main() -> None:
             minio_bucket=fs_bucket,
             sync_interval=sync_interval,
             install_dir=Path(install_dir) if install_dir else None,
-            harness_type=harness_type,
         )
         worker = Worker(config)
 
