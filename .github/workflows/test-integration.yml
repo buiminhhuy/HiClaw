@@ -16,7 +16,7 @@ on:
       - 'qwenpaw/**'
       - 'hermes/**'
       - 'deepseek-harness/**'
-      - 'harness/**'
+      - 'claude-harness/**'
       - 'plugins/teamharness/adapters/qwenpaw/**'
       - 'plugins/teamharness/adapters/deepseek-harness/**'
       - 'plugins/workerflow/adapters/qwenpaw/**'
@@ -39,7 +39,7 @@ on:
       - 'qwenpaw/**'
       - 'hermes/**'
       - 'deepseek-harness/**'
-      - 'harness/**'
+      - 'claude-harness/**'
       - 'plugins/teamharness/adapters/qwenpaw/**'
       - 'plugins/teamharness/adapters/deepseek-harness/**'
       - 'plugins/workerflow/adapters/qwenpaw/**'
@@ -63,7 +63,7 @@ on:
           - openclaw
           - qwenpaw
           - hermes
-          - harness
+          - claude-harness
         default: 'both'
       model:
         description: 'LLM model to use'
@@ -332,12 +332,12 @@ jobs:
           path: /tmp/agentteams-${{ matrix.target }}.tar.gz
           retention-days: 1
 
-  # Step 2b: Build the Harness Worker image for validation only.
+  # Step 2b: Build the Claude Harness Worker image for validation only.
   # Deliberately NOT uploaded as an `image-*` artifact: the test shards load
   # every such artifact, and this image ships Node plus four CLI agents. The
-  # in-cluster harness runtime has no e2e shard yet — it needs real Claude Code
-  # / Codex credentials — so this job only proves the Dockerfile still builds.
-  build-harness-image:
+  # in-cluster claude-harness runtime has no e2e shard yet — it needs real
+  # Claude Code credentials — so this job only proves the Dockerfile still builds.
+  build-claude-harness-image:
     needs: [build-base]
     if: always() && needs.build-base.result == 'success'
     runs-on: ubuntu-latest
@@ -370,7 +370,7 @@ jobs:
 
       - name: Build image
         run: |
-          make build-harness-worker \
+          make build-claude-harness \
             HIGRESS_REGISTRY=higress-registry.us-west-1.cr.aliyuncs.com \
             DOCKER_BUILD_ARGS="--build-arg APT_MIRROR= --build-arg PIP_INDEX_URL=https://pypi.org/simple/"
 

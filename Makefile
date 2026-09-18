@@ -31,7 +31,7 @@ WORKER_IMAGE         ?= $(REGISTRY)/$(REPO)/agentteams-worker
 COPAW_WORKER_IMAGE   ?= $(REGISTRY)/$(REPO)/agentteams-copaw-worker
 HERMES_WORKER_IMAGE  ?= $(REGISTRY)/$(REPO)/agentteams-hermes-worker
 QWENPAW_WORKER_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-qwenpaw-worker
-HARNESS_WORKER_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-harness-worker
+CLAUDE_HARNESS_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-claude-harness
 OPENHUMAN_WORKER_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-openhuman-worker
 DEEPSEEK_HARNESS_WORKER_IMAGE ?= $(REGISTRY)/$(REPO)/agentteams-deepseek-harness-worker
 OPENCLAW_BASE_IMAGE  ?= $(REGISTRY)/$(REPO)/openclaw-base
@@ -44,7 +44,7 @@ WORKER_TAG         ?= $(WORKER_IMAGE):$(VERSION)
 COPAW_WORKER_TAG   ?= $(COPAW_WORKER_IMAGE):$(VERSION)
 HERMES_WORKER_TAG  ?= $(HERMES_WORKER_IMAGE):$(VERSION)
 QWENPAW_WORKER_TAG ?= $(QWENPAW_WORKER_IMAGE):$(VERSION)
-HARNESS_WORKER_TAG ?= $(HARNESS_WORKER_IMAGE):$(VERSION)
+CLAUDE_HARNESS_TAG ?= $(CLAUDE_HARNESS_IMAGE):$(VERSION)
 OPENHUMAN_WORKER_TAG ?= $(OPENHUMAN_WORKER_IMAGE):$(VERSION)
 DEEPSEEK_HARNESS_WORKER_TAG ?= $(DEEPSEEK_HARNESS_WORKER_IMAGE):$(DEEPSEEK_HARNESS_WORKER_VERSION)
 OPENCLAW_BASE_TAG  ?= $(OPENCLAW_BASE_IMAGE):$(VERSION)
@@ -58,7 +58,7 @@ LOCAL_WORKER         = agentteams/worker-agent:$(VERSION)
 LOCAL_COPAW_WORKER   = agentteams/copaw-worker:$(VERSION)
 LOCAL_HERMES_WORKER  = agentteams/hermes-worker:$(VERSION)
 LOCAL_QWENPAW_WORKER = agentteams/qwenpaw-worker:$(VERSION)
-LOCAL_HARNESS_WORKER = agentteams/harness-worker:$(VERSION)
+LOCAL_CLAUDE_HARNESS = agentteams/claude-harness:$(VERSION)
 LOCAL_OPENHUMAN_WORKER = agentteams/openhuman-worker:$(VERSION)
 LOCAL_DEEPSEEK_HARNESS_WORKER = agentteams/deepseek-harness-worker:$(VERSION)
 LOCAL_OPENCLAW_BASE  = agentteams/openclaw-base:$(VERSION)
@@ -80,10 +80,10 @@ comma := ,
 
 ifdef DOCKER_PLATFORM
   PLATFORM_FLAG = --platform $(DOCKER_PLATFORM)
-  HARNESS_BAZELISK_ARCH := $(subst linux/,,$(DOCKER_PLATFORM))
+  CLAUDE_HARNESS_BAZELISK_ARCH := $(subst linux/,,$(DOCKER_PLATFORM))
 else
   PLATFORM_FLAG =
-  HARNESS_BAZELISK_ARCH := $(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+  CLAUDE_HARNESS_BAZELISK_ARCH := $(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 endif
 
 REGISTRY_ARG = --build-arg HIGRESS_REGISTRY=$(HIGRESS_REGISTRY)
@@ -118,11 +118,11 @@ LINES          ?= 50
 # ---------- Phony targets ----------
 
 .PHONY: all build build-openclaw-base build-agentteams-controller build-embedded build-manager build-manager-qwenpaw build-worker build-copaw-worker build-hermes-worker build-openhuman-worker \
-        build-qwenpaw-worker build-deepseek-harness-worker build-harness-worker \
+        build-qwenpaw-worker build-deepseek-harness-worker build-claude-harness \
         tag push push-openclaw-base push-agentteams-controller push-embedded push-manager push-manager-qwenpaw push-worker push-copaw-worker push-hermes-worker push-openhuman-worker \
-        push-qwenpaw-worker push-deepseek-harness-worker push-harness-worker \
+        push-qwenpaw-worker push-deepseek-harness-worker push-claude-harness \
         push-native push-native-manager push-native-manager-qwenpaw push-native-worker push-native-copaw-worker push-native-hermes-worker push-native-openhuman-worker \
-        push-native-qwenpaw-worker push-native-deepseek-harness-worker push-native-harness-worker \
+        push-native-qwenpaw-worker push-native-deepseek-harness-worker push-native-claude-harness \
         buildx-setup \
         test test-quick test-installed test-embedded \
         install install-embedded uninstall uninstall-embedded replay replay-log \
@@ -227,20 +227,20 @@ build-deepseek-harness-worker: ## Build DeepSeek Harness Worker image
 		-t $(LOCAL_DEEPSEEK_HARNESS_WORKER) \
 		.
 
-build-harness-worker: ## Build Harness Worker image (Claude Code / Codex / OpenCode / Gemini CLI)
-	@echo "==> Building Harness Worker image: $(LOCAL_HARNESS_WORKER) (registry: $(HIGRESS_REGISTRY))"
+build-claude-harness: ## Build Claude Harness Worker image
+	@echo "==> Building Claude Harness Worker image: $(LOCAL_CLAUDE_HARNESS) (registry: $(HIGRESS_REGISTRY))"
 	@# Fetched here (host) rather than via curl inside the Dockerfile: on this
 	@# network the corporate TLS-intercepting proxy's root CA is trusted by the
 	@# host but not by the BuildKit container's CA bundle, so the identical curl
 	@# fails there with "self-signed certificate in certificate chain".
-	curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-$(HARNESS_BAZELISK_ARCH)" \
-		-o ./harness/bazelisk-linux-$(HARNESS_BAZELISK_ARCH)
+	curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-$(CLAUDE_HARNESS_BAZELISK_ARCH)" \
+		-o ./claude-harness/bazelisk-linux-$(CLAUDE_HARNESS_BAZELISK_ARCH)
 	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(SHARED_LIB_CTX) $(DOCKER_BUILD_ARGS) \
 		--build-arg AGENTTEAMS_CONTROLLER_IMAGE=$(LOCAL_CONTROLLER_BUILD_IMAGE) \
-		--build-arg BAZELISK_ARCH=$(HARNESS_BAZELISK_ARCH) \
-		-t $(LOCAL_HARNESS_WORKER) \
-		./harness/
-	@rm -f ./harness/bazelisk-linux-$(HARNESS_BAZELISK_ARCH)
+		--build-arg BAZELISK_ARCH=$(CLAUDE_HARNESS_BAZELISK_ARCH) \
+		-t $(LOCAL_CLAUDE_HARNESS) \
+		./claude-harness/
+	@rm -f ./claude-harness/bazelisk-linux-$(CLAUDE_HARNESS_BAZELISK_ARCH)
 
 # ---------- Tag ----------
 
@@ -251,7 +251,7 @@ tag: build ## Tag images for registry push
 	docker tag $(LOCAL_HERMES_WORKER) $(HERMES_WORKER_TAG)
 	docker tag $(LOCAL_OPENHUMAN_WORKER) $(OPENHUMAN_WORKER_TAG)
 	docker tag $(LOCAL_QWENPAW_WORKER) $(QWENPAW_WORKER_TAG)
-	docker tag $(LOCAL_HARNESS_WORKER) $(HARNESS_WORKER_TAG)
+	docker tag $(LOCAL_CLAUDE_HARNESS) $(CLAUDE_HARNESS_TAG)
 ifeq ($(PUSH_LATEST),yes)
 	docker tag $(LOCAL_MANAGER) $(MANAGER_IMAGE):latest
 	docker tag $(LOCAL_WORKER) $(WORKER_IMAGE):latest
@@ -259,7 +259,7 @@ ifeq ($(PUSH_LATEST),yes)
 	docker tag $(LOCAL_HERMES_WORKER) $(HERMES_WORKER_IMAGE):latest
 	docker tag $(LOCAL_OPENHUMAN_WORKER) $(OPENHUMAN_WORKER_IMAGE):latest
 	docker tag $(LOCAL_QWENPAW_WORKER) $(QWENPAW_WORKER_IMAGE):latest
-	docker tag $(LOCAL_HARNESS_WORKER) $(HARNESS_WORKER_IMAGE):latest
+	docker tag $(LOCAL_CLAUDE_HARNESS) $(CLAUDE_HARNESS_IMAGE):latest
 	docker tag $(LOCAL_CONTROLLER) $(CONTROLLER_IMAGE):latest
 	@echo "==> Images tagged as $(VERSION) and latest"
 else
@@ -558,20 +558,20 @@ else
 		-f deepseek-harness/Dockerfile .
 endif
 
-push-harness-worker: buildx-setup ## Build + push multi-arch Harness Worker image
-	@echo "==> Building + pushing multi-arch Harness Worker: $(HARNESS_WORKER_TAG) [$(MULTIARCH_PLATFORMS)]"
+push-claude-harness: buildx-setup ## Build + push multi-arch Claude Harness Worker image
+	@echo "==> Building + pushing multi-arch Claude Harness Worker: $(CLAUDE_HARNESS_TAG) [$(MULTIARCH_PLATFORMS)]"
 ifeq ($(IS_PODMAN),1)
-	-podman manifest rm $(HARNESS_WORKER_TAG) 2>/dev/null
+	-podman manifest rm $(CLAUDE_HARNESS_TAG) 2>/dev/null
 	$(foreach plat,$(subst $(comma), ,$(MULTIARCH_PLATFORMS)), \
-		echo "  -> Building Harness Worker for $(plat)..." && \
+		echo "  -> Building Claude Harness Worker for $(plat)..." && \
 		podman build --platform $(plat) \
 			$(REGISTRY_ARG) $(SHARED_LIB_CTX) $(DOCKER_BUILD_ARGS) \
 			--build-arg AGENTTEAMS_CONTROLLER_IMAGE=$(CONTROLLER_TAG) \
-			--manifest $(HARNESS_WORKER_TAG) \
-			./harness/ && ) true
-	podman manifest push --all $(HARNESS_WORKER_TAG) docker://$(HARNESS_WORKER_TAG)
+			--manifest $(CLAUDE_HARNESS_TAG) \
+			./claude-harness/ && ) true
+	podman manifest push --all $(CLAUDE_HARNESS_TAG) docker://$(CLAUDE_HARNESS_TAG)
 	$(if $(PUSH_LATEST), \
-		podman manifest push --all $(HARNESS_WORKER_TAG) docker://$(HARNESS_WORKER_IMAGE):latest && \
+		podman manifest push --all $(CLAUDE_HARNESS_TAG) docker://$(CLAUDE_HARNESS_IMAGE):latest && \
 		echo "  -> Also pushed :latest tag")
 else
 	docker buildx build \
@@ -579,10 +579,10 @@ else
 		--platform $(MULTIARCH_PLATFORMS) \
 		$(REGISTRY_ARG) $(SHARED_LIB_CTX) $(DOCKER_BUILD_ARGS) \
 		--build-arg AGENTTEAMS_CONTROLLER_IMAGE=$(CONTROLLER_TAG) \
-		-t $(HARNESS_WORKER_TAG) \
-		$(if $(PUSH_LATEST),-t $(HARNESS_WORKER_IMAGE):latest) \
+		-t $(CLAUDE_HARNESS_TAG) \
+		$(if $(PUSH_LATEST),-t $(CLAUDE_HARNESS_IMAGE):latest) \
 		--push \
-		./harness/
+		./claude-harness/
 endif
 
 # ---------- Push native-arch only (dev use) ----------
@@ -641,9 +641,9 @@ push-native-deepseek-harness-worker: build-deepseek-harness-worker ## Push nativ
 	docker tag $(LOCAL_DEEPSEEK_HARNESS_WORKER) $(DEEPSEEK_HARNESS_WORKER_TAG)
 	docker push $(DEEPSEEK_HARNESS_WORKER_TAG)
 
-push-native-harness-worker: build-harness-worker ## Push native-arch Harness Worker only (dev)
-	docker tag $(LOCAL_HARNESS_WORKER) $(HARNESS_WORKER_TAG)
-	docker push $(HARNESS_WORKER_TAG)
+push-native-claude-harness: build-claude-harness ## Push native-arch Claude Harness Worker only (dev)
+	docker tag $(LOCAL_CLAUDE_HARNESS) $(CLAUDE_HARNESS_TAG)
+	docker push $(CLAUDE_HARNESS_TAG)
 
 # ---------- Test ----------
 
